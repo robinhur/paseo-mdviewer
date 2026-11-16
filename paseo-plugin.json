@@ -1,0 +1,8 @@
+{
+  "id": "paseo-mdviewer",
+  "media": [],
+  "requirements": {
+    "paseo": ">=0.15.4"
+  },
+  "name": "MDViewer"
+}
