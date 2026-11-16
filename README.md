@@ -18,15 +18,20 @@
 
 ## Install
 
-From the Paseo plugin directory, or from a local checkout:
+```sh
+paseo plugin install github:robinhur/paseo-mdviewer
+```
+
+Or from a local checkout:
 
 ```sh
-git clone <repository-url> paseo-mdviewer
+git clone https://github.com/robinhur/paseo-mdviewer.git
 cd paseo-mdviewer
 npm install
-npm run build
 paseo plugin install "$(pwd)"
 ```
+
+The built engine and runtimes in `server/generated/` are committed, so no build step is needed to install.
 
 Plugins must be enabled on the daemon (**Settings → Plugins → Enable plugins**).
 
