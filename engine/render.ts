@@ -229,6 +229,18 @@ function splitFrontMatter(text: string): { frontMatter?: string; body: string } 
   return { frontMatter: match[1], body: "\n".repeat(lines) + text.slice(match[0].length) };
 }
 
+/**
+ * Raw HTML `<img>` tags (common in READMEs) bypass the Markdown image rule. Inline their local
+ * files too, since the sandboxed preview frame cannot read the disk.
+ */
+function inlineHtmlImages(html: string, env: RenderEnv): string {
+  return html.replace(/(<img\b[^>]*?\ssrc\s*=\s*)(["'])([^"']*)\2/gi, (match, head: string, quote: string, src: string) => {
+    if (src.startsWith("data:")) return match;
+    const inlined = inlineImage(src, env);
+    return inlined ? `${head}${quote}${inlined}${quote}` : match;
+  });
+}
+
 export interface RenderResult {
   html: string;
   title: string;
@@ -251,6 +263,7 @@ export function renderMarkdown(text: string, docPath?: string): RenderResult {
   if (hasToc) {
     body = body.replace(new RegExp(`<p[^>]*>\\s*${TOC_MARKER}\\s*</p>`), renderToc(env.headings));
   }
+  body = inlineHtmlImages(body, env);
   const title = env.headings.find((h) => h.level === 1)?.text ?? (docPath ? path.basename(docPath) : "Untitled");
   return { html: renderFrontMatter(env.frontMatter) + body, title, headings: env.headings };
 }

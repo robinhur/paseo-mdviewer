@@ -20,19 +20,92 @@ export type FrameMessage =
   | { type: "copy"; text: string }
   | { type: "toggleTask"; line: number }
   | { type: "line"; line: number }
-  | { type: "scale"; scale: number }
-  | { type: "log"; message: string };
+  | { type: "scale"; scale: number };
+
+/** Text the preview frame shows. The panel sends a translated copy. */
+export interface ShellStrings {
+  copy: string;
+  copied: string;
+  contents: string;
+  onThisPage: string;
+  noHeadings: string;
+  findPlaceholder: string;
+  previous: string;
+  next: string;
+  close: string;
+  zoomIn: string;
+  zoomOut: string;
+  reset: string;
+  enlarge: string;
+  zoomHint: string;
+  diagramError: string;
+  sanitizerMissing: string;
+}
+
+export const DEFAULT_STRINGS: ShellStrings = {
+  copy: "Copy",
+  copied: "Copied",
+  contents: "Contents",
+  onThisPage: "On this page",
+  noHeadings: "No headings",
+  findPlaceholder: "Find in document",
+  previous: "Previous (Shift+Enter)",
+  next: "Next (Enter)",
+  close: "Close (Esc)",
+  zoomIn: "Zoom in",
+  zoomOut: "Zoom out",
+  reset: "Fit to view",
+  enlarge: "Click to enlarge",
+  zoomHint: "Pinch or Ctrl+scroll to zoom · drag or scroll to pan · double-click to zoom · Esc to close",
+  diagramError: "Diagram error",
+  sanitizerMissing: "The preview could not load its HTML sanitizer, so the document is not shown.",
+};
 
 const BOOT = String.raw`
 (function () {
-  var content = document.getElementById("content");
-  var outline = document.getElementById("outline");
-  var overlay = document.getElementById("overlay");
-  var stage = document.getElementById("stage");
-  var findBar = document.getElementById("find");
-  var findInput = document.getElementById("find-input");
-  var findCount = document.getElementById("find-count");
+  var content = document.getElementById("mdv-content");
+  var outline = document.getElementById("mdv-outline");
+  var overlay = document.getElementById("mdv-overlay");
+  var stage = document.getElementById("mdv-stage");
+  var findBar = document.getElementById("mdv-find");
+  var findInput = document.getElementById("mdv-find-input");
+  var findCount = document.getElementById("mdv-find-count");
+  var S = ${JSON.stringify(DEFAULT_STRINGS)};
   var dark = false;
+
+  function applyStrings() {
+    outline.querySelector(".ol-title").textContent = S.onThisPage;
+    outline.setAttribute("aria-label", S.onThisPage);
+    findInput.placeholder = S.findPlaceholder;
+    findInput.setAttribute("aria-label", S.findPlaceholder);
+    document.getElementById("mdv-find-prev").title = S.previous;
+    document.getElementById("mdv-find-next").title = S.next;
+    document.getElementById("mdv-find-close").title = S.close;
+    document.getElementById("mdv-ov-out").title = S.zoomOut;
+    document.getElementById("mdv-ov-in").title = S.zoomIn;
+    document.getElementById("mdv-ov-reset").title = S.reset;
+    document.getElementById("mdv-ov-close").title = S.close;
+    overlay.querySelector(".ov-hint").textContent = S.zoomHint;
+    localizeContent();
+  }
+  function localizeContent() {
+    content.querySelectorAll(".toc-title").forEach(function (el) { el.textContent = S.contents; });
+    content.querySelectorAll("button.copy").forEach(function (el) { if (!el.classList.contains("done")) el.textContent = S.copy; });
+    content.querySelectorAll(".diagram-svg").forEach(function (el) { el.title = S.enlarge; });
+    var empty = outline.querySelector(".ol-empty");
+    if (empty) empty.textContent = S.noHeadings;
+  }
+
+  // Raw HTML in a Markdown file is untrusted. Everything shown passes through DOMPurify, which
+  // drops scripts, event handlers and javascript: URLs; the document's policy blocks the rest.
+  function sanitize(html) {
+    if (!window.DOMPurify) return null;
+    return window.DOMPurify.sanitize(html, {
+      ADD_TAGS: ["semantics", "annotation"],
+      ADD_ATTR: ["encoding", "target"],
+      FORBID_TAGS: ["style", "form", "iframe", "object", "embed", "base", "link", "meta"],
+    });
+  }
   var diagramCache = new Map();
   var diagramSeq = 0;
   var pendingLine = null;
@@ -50,15 +123,40 @@ const BOOT = String.raw`
     root.dataset.theme = dark ? "dark" : "light";
   }
 
-  function diagramKey(code) { return (dark ? "d:" : "l:") + code; }
+  function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue("--" + name).trim(); }
+  function palette() {
+    return { bg: cssVar("bg"), fg: cssVar("fg"), muted: cssVar("muted"), border: cssVar("border"),
+      accent: cssVar("accent"), surface: cssVar("surface"), raised: cssVar("raised") };
+  }
+  function diagramKey(code) { var p = palette(); return [dark, p.bg, p.fg, p.accent, p.surface].join("|") + "\n" + code; }
+
+  // Diagrams take their colors from the Paseo theme instead of Mermaid's stock themes.
+  function diagramTheme() {
+    var p = palette();
+    return {
+      darkMode: dark, fontSize: "14px", fontFamily: getComputedStyle(document.body).fontFamily,
+      background: p.bg, primaryColor: p.raised, primaryTextColor: p.fg, primaryBorderColor: p.accent,
+      secondaryColor: p.surface, secondaryTextColor: p.fg, secondaryBorderColor: p.border,
+      tertiaryColor: p.surface, tertiaryTextColor: p.fg, tertiaryBorderColor: p.border,
+      lineColor: p.muted, textColor: p.fg, mainBkg: p.raised, nodeBorder: p.accent, nodeTextColor: p.fg,
+      clusterBkg: p.surface, clusterBorder: p.border, titleColor: p.fg, edgeLabelBackground: p.bg,
+      actorBkg: p.raised, actorBorder: p.accent, actorTextColor: p.fg, actorLineColor: p.border,
+      signalColor: p.muted, signalTextColor: p.fg, labelBoxBkgColor: p.raised, labelBoxBorderColor: p.border,
+      labelTextColor: p.fg, loopTextColor: p.fg, noteBkgColor: p.surface, noteTextColor: p.fg, noteBorderColor: p.border,
+      activationBkgColor: p.surface, activationBorderColor: p.accent, sequenceNumberColor: p.bg,
+      git0: p.accent, gitBranchLabel0: p.bg, commitLabelColor: p.fg, commitLabelBackground: p.surface,
+      pie1: p.accent, pieTitleTextColor: p.fg, pieSectionTextColor: p.bg, pieLegendTextColor: p.fg, pieStrokeColor: p.bg,
+    };
+  }
 
   async function drawDiagrams(token) {
     var nodes = Array.prototype.slice.call(content.querySelectorAll("pre.mermaid"));
     if (!nodes.length || !window.mermaid) return;
     window.mermaid.initialize({
-      startOnLoad: false, securityLevel: "strict", theme: dark ? "dark" : "default",
+      startOnLoad: false, securityLevel: "strict", theme: "base",
       fontFamily: getComputedStyle(document.body).fontFamily,
-      themeVariables: { fontSize: "14px" },
+      themeVariables: diagramTheme(),
+      flowchart: { htmlLabels: true, curve: "basis", padding: 12 },
     });
     for (var i = 0; i < nodes.length; i++) {
       if (token !== renderToken) return;
@@ -75,7 +173,7 @@ const BOOT = String.raw`
         } catch (error) {
           var box = document.createElement("div");
           box.className = "diagram-error";
-          box.textContent = "Diagram error: " + (error && error.message ? error.message : String(error));
+          box.textContent = S.diagramError + ": " + (error && error.message ? error.message : String(error));
           node.replaceWith(box);
           var stray = document.getElementById("dmdv-diagram-" + diagramSeq);
           if (stray) stray.remove();
@@ -85,8 +183,9 @@ const BOOT = String.raw`
       if (token !== renderToken) return;
       var holder = document.createElement("div");
       holder.className = "diagram-svg";
+      // Mermaid runs with securityLevel "strict": it escapes label HTML and drops click handlers.
       holder.innerHTML = svg;
-      holder.title = "Click to enlarge";
+      holder.title = S.enlarge;
       node.replaceWith(holder);
     }
   }
@@ -98,7 +197,7 @@ const BOOT = String.raw`
       var text = h.textContent.replace(/^#\s*/, "");
       html += '<a class="ol-' + h.tagName.toLowerCase() + '" href="#' + encodeURIComponent(h.id) + '" data-target="' + h.id + '">' + escapeHtml(text) + "</a>";
     });
-    outline.querySelector(".ol-items").innerHTML = html || '<div class="ol-empty">No headings</div>';
+    outline.querySelector(".ol-items").innerHTML = html || '<div class="ol-empty">' + escapeHtml(S.noHeadings) + "</div>";
     spy();
   }
 
@@ -221,10 +320,10 @@ const BOOT = String.raw`
   }, { passive: false });
   overlay.addEventListener("touchend", function (event) { touch = event.touches.length ? touchInfo(event.touches) : null; });
   function centerZoom(factor) { zoomAt(overlay.clientWidth / 2, overlay.clientHeight / 2, zoom * factor); }
-  document.getElementById("ov-close").addEventListener("click", closeOverlay);
-  document.getElementById("ov-in").addEventListener("click", function () { centerZoom(1.3); });
-  document.getElementById("ov-out").addEventListener("click", function () { centerZoom(1 / 1.3); });
-  document.getElementById("ov-reset").addEventListener("click", fit);
+  document.getElementById("mdv-ov-close").addEventListener("click", closeOverlay);
+  document.getElementById("mdv-ov-in").addEventListener("click", function () { centerZoom(1.3); });
+  document.getElementById("mdv-ov-out").addEventListener("click", function () { centerZoom(1 / 1.3); });
+  document.getElementById("mdv-ov-reset").addEventListener("click", fit);
   window.addEventListener("resize", function () { if (!overlay.hidden) fit(); });
 
   // Pinch (Ctrl+scroll) on the document changes the text size; the panel stores the result.
@@ -291,9 +390,9 @@ const BOOT = String.raw`
     if (event.key === "Enter") { event.preventDefault(); step(event.shiftKey ? -1 : 1); }
     if (event.key === "Escape") closeFind();
   });
-  document.getElementById("find-next").addEventListener("click", function () { step(1); });
-  document.getElementById("find-prev").addEventListener("click", function () { step(-1); });
-  document.getElementById("find-close").addEventListener("click", closeFind);
+  document.getElementById("mdv-find-next").addEventListener("click", function () { step(1); });
+  document.getElementById("mdv-find-prev").addEventListener("click", function () { step(-1); });
+  document.getElementById("mdv-find-close").addEventListener("click", closeFind);
 
   document.addEventListener("keydown", function (event) {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f") { event.preventDefault(); openFind(); }
@@ -307,7 +406,10 @@ const BOOT = String.raw`
       var token = ++renderToken;
       var y = window.scrollY;
       var findOpen = !findBar.hidden && findInput.value;
-      content.innerHTML = data.html;
+      var clean = sanitize(data.html);
+      if (clean === null) { content.textContent = S.sanitizerMissing; return; }
+      content.innerHTML = clean;
+      localizeContent();
       content.querySelectorAll(".task-list-item-checkbox").forEach(function (box) {
         box.removeAttribute("disabled");
         var li = box.closest("li");
@@ -329,6 +431,9 @@ const BOOT = String.raw`
       document.body.classList.toggle("with-outline", !!data.outline);
       document.body.classList.toggle("wide", !!data.wide);
       document.body.classList.toggle("narrow", !!data.narrow);
+    } else if (data.type === "strings") {
+      Object.keys(S).forEach(function (key) { if (typeof data.strings[key] === "string") S[key] = data.strings[key]; });
+      applyStrings();
     } else if (data.type === "scrollToLine") {
       if (content.childElementCount) scrollToLine(data.line, !!data.smooth); else pendingLine = data.line;
     } else if (data.type === "find") {
@@ -342,8 +447,8 @@ const BOOT = String.raw`
     if (copy) {
       var code = copy.parentElement.querySelector("pre code") || copy.parentElement.querySelector("pre");
       send({ type: "copy", text: code ? code.textContent : "" });
-      copy.textContent = "Copied"; copy.classList.add("done");
-      setTimeout(function () { copy.textContent = "Copy"; copy.classList.remove("done"); }, 1200);
+      copy.textContent = S.copied; copy.classList.add("done");
+      setTimeout(function () { copy.textContent = S.copy; copy.classList.remove("done"); }, 1200);
       return;
     }
     var box = target.closest && target.closest("input.task-list-item-checkbox");
@@ -355,7 +460,7 @@ const BOOT = String.raw`
     }
     var diagram = target.closest && target.closest(".diagram-svg");
     if (diagram && !target.closest("a")) { openOverlay(diagram); return; }
-    var image = target.closest && target.closest("#content img");
+    var image = target.closest && target.closest("#mdv-content img");
     if (image && !target.closest("a")) { openOverlay(image); return; }
     var link = target.closest && target.closest("a[href]");
     if (!link) return;
@@ -375,6 +480,7 @@ const BOOT = String.raw`
     }
   });
 
+  applyStrings();
   send({ type: "ready" });
 })();
 `;
@@ -403,14 +509,14 @@ body {
   word-break: keep-all; overflow-wrap: anywhere;
 }
 ::selection { background: color-mix(in srgb, var(--accent) 28%, transparent); }
-#content { max-width: var(--content-width); margin: 0 auto; padding: 40px 48px 120px; transition: margin .2s ease; }
-body.wide #content { max-width: none; }
-body.narrow #content { max-width: 700px; }
-body.with-outline #content { margin-right: max(260px, calc((100vw - var(--content-width)) / 2)); }
+#mdv-content { max-width: var(--content-width); margin: 0 auto; padding: 40px 48px 120px; transition: margin .2s ease; }
+body.wide #mdv-content { max-width: none; }
+body.narrow #mdv-content { max-width: 700px; }
+body.with-outline #mdv-content { margin-right: max(260px, calc((100vw - var(--content-width)) / 2)); }
 
 /* Headings */
 h1, h2, h3, h4, h5, h6 { position: relative; line-height: 1.32; margin: 2em 0 .7em; font-weight: 700; letter-spacing: -0.012em; scroll-margin-top: 20px; }
-#content > :first-child, #content > .front-matter + h1 { margin-top: 0; }
+#mdv-content > :first-child, #mdv-content > .front-matter + h1 { margin-top: 0; }
 h1 { font-size: 2.05em; letter-spacing: -0.022em; margin-bottom: .8em; }
 h2 { font-size: 1.5em; padding-bottom: .35em; border-bottom: 1px solid var(--border); }
 h3 { font-size: 1.24em; }
@@ -560,8 +666,11 @@ dd { margin: 0 0 .6em 1.4em; color: var(--muted); }
   border-radius: var(--radius); background: color-mix(in srgb, var(--surface) 55%, var(--bg)); overflow-x: auto;
 }
 .diagram pre.mermaid { margin: 0; color: var(--muted); font: .8em var(--mono); white-space: pre-wrap; opacity: .5; }
-.diagram-svg { cursor: zoom-in; max-width: 100%; }
+.diagram-svg { cursor: zoom-in; width: 100%; display: flex; justify-content: center; }
 .diagram-svg svg { max-width: 100%; height: auto; }
+.diagram-svg .edgeLabel, .diagram-svg .edgeLabel p, .diagram-svg .labelBkg { background: transparent !important; }
+.diagram-svg .edgeLabel { color: var(--muted); font-size: .92em; }
+.diagram-svg .node rect, .diagram-svg .node polygon, .diagram-svg .node circle, .diagram-svg .node path { rx: 6px; }
 .diagram-error { color: var(--danger); font: .82em var(--mono); white-space: pre-wrap; }
 .katex-display { overflow-x: auto; overflow-y: hidden; padding: .4em 0; }
 .math-block { text-align: center; }
@@ -573,41 +682,41 @@ mark.mdv-hit { background: color-mix(in srgb, var(--warning) 45%, transparent); 
 mark.mdv-hit.current { background: var(--warning); color: var(--bg); }
 
 /* Outline */
-#outline {
+#mdv-outline {
   position: fixed; top: 0; right: 0; bottom: 0; width: 240px; padding: 28px 18px 28px 14px;
   border-left: 1px solid var(--border); background: var(--bg); overflow-y: auto; display: none; font-size: .82em;
 }
-body.with-outline #outline { display: block; }
-#outline .ol-title { font-weight: 650; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-size: .85em; margin: 0 0 .8em .6em; }
-#outline a { display: block; padding: .28em .6em; border-radius: 6px; color: var(--muted); line-height: 1.4; border-left: 2px solid transparent; }
-#outline a:hover { color: var(--fg); background: var(--surface); text-decoration: none; }
-#outline a.active { color: var(--accent); border-left-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
-#outline .ol-h1 { font-weight: 650; color: var(--fg); }
-#outline .ol-h3 { padding-left: 1.5em; }
-#outline .ol-h4 { padding-left: 2.4em; font-size: .95em; }
-#outline .ol-empty { color: var(--muted); padding: .3em .6em; }
+body.with-outline #mdv-outline { display: block; }
+#mdv-outline .ol-title { font-weight: 650; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-size: .85em; margin: 0 0 .8em .6em; }
+#mdv-outline a { display: block; padding: .28em .6em; border-radius: 6px; color: var(--muted); line-height: 1.4; border-left: 2px solid transparent; }
+#mdv-outline a:hover { color: var(--fg); background: var(--surface); text-decoration: none; }
+#mdv-outline a.active { color: var(--accent); border-left-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+#mdv-outline .ol-h1 { font-weight: 650; color: var(--fg); }
+#mdv-outline .ol-h3 { padding-left: 1.5em; }
+#mdv-outline .ol-h4 { padding-left: 2.4em; font-size: .95em; }
+#mdv-outline .ol-empty { color: var(--muted); padding: .3em .6em; }
 
 /* Find bar */
-#find {
+#mdv-find {
   position: fixed; top: 12px; right: 18px; z-index: 20; display: flex; align-items: center; gap: 4px;
   padding: 6px 6px 6px 10px; border-radius: 10px; background: var(--raised); border: 1px solid var(--border);
   box-shadow: 0 8px 24px rgba(0,0,0,.18); font-size: 13px;
 }
-#find[hidden] { display: none; }
-#find input { width: 180px; border: 0; outline: none; background: transparent; color: var(--fg); font: inherit; }
-#find-count { color: var(--muted); min-width: 3.4em; text-align: right; font-variant-numeric: tabular-nums; }
-#find button, .ov-tools button {
+#mdv-find[hidden] { display: none; }
+#mdv-find input { width: 180px; border: 0; outline: none; background: transparent; color: var(--fg); font: inherit; }
+#mdv-find-count { color: var(--muted); min-width: 3.4em; text-align: right; font-variant-numeric: tabular-nums; }
+#mdv-find button, .ov-tools button {
   border: 0; background: transparent; color: var(--fg); width: 28px; height: 28px; border-radius: 7px; cursor: pointer; font-size: 14px;
 }
-#find button:hover, .ov-tools button:hover { background: var(--surface); }
+#mdv-find button:hover, .ov-tools button:hover { background: var(--surface); }
 
 /* Zoom overlay */
-#overlay { position: fixed; inset: 0; z-index: 30; background: color-mix(in srgb, var(--bg) 94%, transparent); backdrop-filter: blur(6px); overflow: hidden; cursor: grab; }
-#overlay[hidden] { display: none; }
-#overlay:active { cursor: grabbing; }
-#stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
-#stage > * { display: block; }
-#stage img { cursor: grab; border-radius: 4px; }
+#mdv-overlay { position: fixed; inset: 0; z-index: 30; background: color-mix(in srgb, var(--bg) 94%, transparent); backdrop-filter: blur(6px); overflow: hidden; cursor: grab; }
+#mdv-overlay[hidden] { display: none; }
+#mdv-overlay:active { cursor: grabbing; }
+#mdv-stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+#mdv-stage > * { display: block; }
+#mdv-stage img { cursor: grab; border-radius: 4px; }
 .ov-tools {
   position: absolute; top: 14px; right: 14px; display: flex; gap: 2px; padding: 4px; border-radius: 10px;
   background: var(--raised); border: 1px solid var(--border); box-shadow: 0 8px 24px rgba(0,0,0,.18); z-index: 2;
@@ -615,14 +724,14 @@ body.with-outline #outline { display: block; }
 .ov-hint { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); color: var(--muted); font-size: 12px; }
 
 @media (max-width: 700px) {
-  #content { padding: 22px 18px 80px; }
-  body.with-outline #outline { display: none; }
-  body.with-outline #content { margin-right: auto; }
+  #mdv-content { padding: 22px 18px 80px; }
+  body.with-outline #mdv-outline { display: none; }
+  body.with-outline #mdv-content { margin-right: auto; }
   .anchor { display: none; }
 }
 @media print {
-  #outline, #find, #overlay, button.copy { display: none !important; }
-  #content { max-width: none; padding: 0; }
+  #mdv-outline, #mdv-find, #mdv-overlay, button.copy { display: none !important; }
+  #mdv-content { max-width: none; padding: 0; }
 }
 `;
 
@@ -630,24 +739,59 @@ function escapeScript(source: string): string {
   return source.replace(/<\/script/gi, "<\\/script");
 }
 
-export function buildShell(runtimeScript: string, runtimeCss: string): string {
+export interface ShellRuntime {
+  /** Mermaid browser build. */
+  script: string;
+  /** DOMPurify browser build. */
+  purify: string;
+  /** KaTeX stylesheet with embedded fonts. */
+  css: string;
+}
+
+function createNonce(): string {
+  let value = "";
+  for (let i = 0; i < 4; i++) value += Math.random().toString(36).slice(2);
+  return value;
+}
+
+/**
+ * The preview document. A content security policy allows only the three scripts carrying this
+ * document's nonce, so nothing in a rendered Markdown file can run script or reach the network
+ * except by loading https images.
+ */
+export function buildShell(runtime: ShellRuntime): string {
+  const nonce = createNonce();
+  const policy = [
+    "default-src 'none'",
+    `script-src 'nonce-${nonce}'`,
+    "style-src 'unsafe-inline'",
+    "img-src data: https:",
+    "font-src data:",
+    "connect-src 'none'",
+    "frame-src 'none'",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+  ].join("; ");
   return [
     '<!doctype html><html data-theme="light"><head><meta charset="utf-8">',
+    `<meta http-equiv="Content-Security-Policy" content="${policy}">`,
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
-    `<style>${runtimeCss}</style>`,
+    `<style>${runtime.css}</style>`,
     `<style>${CSS}</style>`,
     "</head><body>",
-    '<main id="content"></main>',
-    '<nav id="outline" aria-label="Outline"><div class="ol-title">On this page</div><div class="ol-items"></div></nav>',
-    '<div id="find" hidden><input id="find-input" type="search" placeholder="Find in document" aria-label="Find in document">',
-    '<span id="find-count"></span><button id="find-prev" title="Previous (Shift+Enter)">↑</button>',
-    '<button id="find-next" title="Next (Enter)">↓</button><button id="find-close" title="Close (Esc)">✕</button></div>',
-    '<div id="overlay" hidden><div class="ov-tools"><button id="ov-out" title="Zoom out">−</button>',
-    '<button id="ov-reset" title="Reset">⟲</button><button id="ov-in" title="Zoom in">+</button>',
-    '<button id="ov-close" title="Close (Esc)">✕</button></div><div id="stage"></div>',
-    '<div class="ov-hint">Pinch or Ctrl+scroll to zoom · drag or scroll to pan · double-click to zoom · Esc to close</div></div>',
-    `<script>${escapeScript(runtimeScript)}</script>`,
-    `<script>${BOOT}</script>`,
+    '<main id="mdv-content"></main>',
+    '<nav id="mdv-outline"><div class="ol-title"></div><div class="ol-items"></div></nav>',
+    '<div id="mdv-find" hidden><input id="mdv-find-input" type="search">',
+    '<span id="mdv-find-count"></span><button id="mdv-find-prev">↑</button>',
+    '<button id="mdv-find-next">↓</button><button id="mdv-find-close">✕</button></div>',
+    '<div id="mdv-overlay" hidden><div class="ov-tools"><button id="mdv-ov-out">−</button>',
+    '<button id="mdv-ov-reset">⟲</button><button id="mdv-ov-in">+</button>',
+    '<button id="mdv-ov-close">✕</button></div><div id="mdv-stage"></div>',
+    '<div class="ov-hint"></div></div>',
+    `<script nonce="${nonce}">${escapeScript(runtime.purify)}</script>`,
+    `<script nonce="${nonce}">${escapeScript(runtime.script)}</script>`,
+    `<script nonce="${nonce}">${BOOT}</script>`,
     "</body></html>",
   ].join("");
 }

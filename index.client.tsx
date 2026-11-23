@@ -1,73 +1,83 @@
 import type { PluginCleanup } from "@getpaseo/plugin";
 import type { PluginClientContext } from "@getpaseo/plugin/client";
-import { CARD_KIND, cardSchema, FILES_KIND, filesSchema, logRpc, recentRpc, resolveRpc } from "./shared/rpc";
 import { FilesRow, MarkdownCard } from "./client/chat";
-import { FILLED_BOOK } from "./client/icons";
+import { makeDocPanel } from "./client/doc-panel";
 import { MarkdownFilePanel } from "./client/file-panel";
-import { ensurePanel, openMarkdown, setClient, VIEWER_PANEL_ID } from "./client/state";
+import { FILLED_BOOK } from "./client/icons";
+import { messages } from "./client/messages";
 import { SettingsScreen } from "./client/settings-screen";
-import { makeDocPanel, MarkdownViewerPanel } from "./client/viewer-panel";
+import { ensurePanel, openMarkdown, setClient } from "./client/state";
+import { MARKDOWN_EXTENSIONS } from "./shared/paths";
+import { CARD_KIND, cardSchema, FILES_KIND, filesSchema, recentRpc, reportRpc, resolveRpc } from "./shared/rpc";
+
+const SETTINGS_ID = "preferences";
 
 export default function contribute(client: PluginClientContext) {
   setClient(client, makeDocPanel);
-  // Re-register tabs for files opened before, so restored tabs find their panels.
-  void client
-    .rpc(recentRpc, {})
-    .then(({ paths }) => paths.forEach((path) => ensurePanel(path)))
-    .catch(() => undefined);
+  const report = (message: string) => void client.rpc(reportRpc, { message }).catch(() => undefined);
+
+  // Re-register the tabs of files opened before, so tabs Paseo restores find their panels.
+  client.rpc(recentRpc, {}).then(
+    ({ paths }) => paths.forEach((path) => ensurePanel(path)),
+    (error: Error) => report(`could not restore document tabs: ${error.message}`),
+  );
+
   const cleanups: PluginCleanup[] = [];
   const register = (name: string, add: () => PluginCleanup) => {
     try {
       cleanups.push(add());
     } catch (error) {
-      void client.rpc(logRpc, { message: `register ${name} failed: ${(error as Error).message}` }).catch(() => undefined);
+      report(`could not register ${name}: ${(error as Error).message}`);
     }
   };
 
-  register("file-panel", () =>
+  register("file panel", () =>
     client.addFilePanel({
       id: "markdown",
       title: "MDViewer",
       icon: FILLED_BOOK,
-      files: { extensions: ["md", "markdown", "mdx", "mdown", "mkd"] },
+      files: { extensions: [...MARKDOWN_EXTENSIONS] },
       Component: MarkdownFilePanel,
     }),
   );
-  register("viewer-panel", () =>
-    client.addWorkspacePanel({ id: VIEWER_PANEL_ID, title: "MDViewer", icon: FILLED_BOOK, Component: MarkdownViewerPanel }),
-  );
-  register("files-row", () =>
+  register("reply buttons", () =>
     client.addTimelineRenderer({ kind: FILES_KIND, version: 1, schema: filesSchema, Component: FilesRow }),
   );
-  register("card", () =>
+  register("agent card", () =>
     client.addTimelineRenderer({ kind: CARD_KIND, version: 1, schema: cardSchema, Component: MarkdownCard }),
   );
-  register("slash", () =>
+  register("/mdv", () =>
     client.addSlashCommand({
       name: "mdv",
-      description: "Open a Markdown file in MDViewer",
-      argumentHint: "path/to/file.md[:line]",
-      context: "workspace",
-      async onSubmit({ args, workspace, rpc }) {
-        if (!args.trim()) throw new Error("Usage: /mdv path/to/file.md[:line]");
-        const { files } = await rpc(resolveRpc, { candidates: [args.trim()], cwd: workspace.directory });
+      description: messages.message("command.description"),
+      argumentHint: messages.message("command.hint"),
+      context: "agent",
+      async onSubmit({ args, workspace, agent, rpc }) {
+        const input = args.trim();
+        if (!input) throw new Error(client.i18n.t(messages, "command.usage"));
+        const { files } = await rpc(resolveRpc, { candidates: [input], cwd: agent.cwd || workspace.directory });
         const file = files[0];
-        if (!file) throw new Error(`No Markdown file at ${args.trim()}`);
-        openMarkdown(workspace.id, file.path, file.line);
+        if (!file) throw new Error(client.i18n.t(messages, "command.notFound", { path: input }));
+        openMarkdown({ workspaceId: workspace.id, agentId: agent.id, path: file.path, line: file.line });
       },
     }),
   );
-  register("settings", () =>
-    client.addSettingsScreen({ id: "preferences", title: "Settings", icon: "Settings", Component: SettingsScreen }),
+  register("settings screen", () =>
+    client.addSettingsScreen({
+      id: SETTINGS_ID,
+      title: messages.message("settings.title"),
+      icon: "Settings",
+      Component: SettingsScreen,
+    }),
   );
-  register("command", () =>
+  register("settings command", () =>
     client.addCommandCenterItem({
-      id: "open-viewer",
-      title: "Open MDViewer",
+      id: "settings",
+      title: messages.message("command.settings"),
       icon: FILLED_BOOK,
-      context: "workspace",
-      onSelect({ openPanel }) {
-        openPanel(VIEWER_PANEL_ID);
+      context: "global",
+      onSelect({ openSettings }) {
+        openSettings(SETTINGS_ID);
       },
     }),
   );

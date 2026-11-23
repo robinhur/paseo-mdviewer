@@ -1,9 +1,10 @@
 import type { PluginTheme } from "@getpaseo/plugin";
-import { useRpc } from "@getpaseo/plugin/client";
+import { useRpc, useTranslation } from "@getpaseo/plugin/client";
 import { copyText, Icon, useToast } from "@getpaseo/plugin/client/ui";
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { revealRpc } from "../shared/rpc";
+import { messages } from "./messages";
 import { isHovered } from "./pressable";
 import { onContextMenu } from "./web";
 
@@ -18,9 +19,10 @@ interface MenuItem {
   run(): Promise<void> | void;
 }
 
-/** The document's full path, with a copy / reveal menu on click or right-click. */
+/** The document's full path, with a copy and reveal menu on click or right-click. */
 export function PathBar({ path, theme, compact }: { path: string; theme: PluginTheme; compact: boolean }) {
   const c = theme.colors;
+  const { t } = useTranslation(messages);
   const toast = useToast();
   const reveal = useRpc(revealRpc);
   const [open, setOpen] = useState(false);
@@ -28,26 +30,26 @@ export function PathBar({ path, theme, compact }: { path: string; theme: PluginT
 
   useEffect(() => onContextMenu(node, () => setOpen(true)), [node]);
 
-  const copy = (value: string, what: string) =>
+  const copy = (value: string, done: string) =>
     copyText(value).then(
-      () => toast.show(`${what} copied`),
-      () => toast.error("Copy failed"),
+      () => toast.show(done),
+      () => toast.error(t("toast.copyFailed")),
     );
   const host = async (action: "reveal" | "open" | "folder") => {
     const result = await reveal({ path, action });
-    if (!result.ok) toast.error(result.message || "Could not open");
+    if (!result.ok) toast.error(t("toast.openFailed"));
   };
   const name = path.split("/").pop() ?? path;
   const folder = path.slice(0, path.length - name.length - 1) || "/";
 
   const items: (MenuItem | "separator")[] = [
-    { key: "copy-path", icon: "Copy", label: "Copy path", run: () => copy(path, "Path") },
-    { key: "copy-name", icon: "FileText", label: "Copy file name", run: () => copy(name, "File name") },
-    { key: "copy-folder", icon: "Folder", label: "Copy folder path", run: () => copy(folder, "Folder path") },
+    { key: "copy-path", icon: "Copy", label: t("menu.copyPath"), run: () => copy(path, t("toast.pathCopied")) },
+    { key: "copy-name", icon: "FileText", label: t("menu.copyName"), run: () => copy(name, t("toast.nameCopied")) },
+    { key: "copy-folder", icon: "Folder", label: t("menu.copyFolder"), run: () => copy(folder, t("toast.folderCopied")) },
     "separator",
-    { key: "reveal", icon: "FolderSearch", label: "Reveal in Finder", run: () => host("reveal") },
-    { key: "open", icon: "ExternalLink", label: "Open in default app", run: () => host("open") },
-    { key: "folder", icon: "FolderOpen", label: "Open containing folder", run: () => host("folder") },
+    { key: "reveal", icon: "FolderSearch", label: t("menu.reveal"), run: () => host("reveal") },
+    { key: "open", icon: "ExternalLink", label: t("menu.openDefault"), run: () => host("open") },
+    { key: "folder", icon: "FolderOpen", label: t("menu.openFolder"), run: () => host("folder") },
   ];
 
   return (
@@ -55,8 +57,8 @@ export function PathBar({ path, theme, compact }: { path: string; theme: PluginT
       <Pressable
         ref={setNode}
         accessibilityRole="button"
-        accessibilityLabel={`${path}. Open file menu`}
-        onPress={() => setOpen((v) => !v)}
+        accessibilityLabel={t("menu.label", { path })}
+        onPress={() => setOpen((value) => !value)}
         style={(state) => ({
           flexDirection: "row",
           alignItems: "center",
@@ -68,7 +70,11 @@ export function PathBar({ path, theme, compact }: { path: string; theme: PluginT
           minWidth: 0,
         })}
       >
-        <Text style={{ color: c.foreground, fontSize: 12.5, fontWeight: "600", flexShrink: 1 }} numberOfLines={1} ellipsizeMode="middle">
+        <Text
+          style={{ color: c.foreground, fontSize: 12.5, fontWeight: "600", flexShrink: 1 }}
+          numberOfLines={1}
+          ellipsizeMode="middle"
+        >
           {compact ? name : displayPath(path)}
         </Text>
         <Icon name="ChevronDown" size={13} color={c.foregroundMuted} />
@@ -76,7 +82,7 @@ export function PathBar({ path, theme, compact }: { path: string; theme: PluginT
       {open ? (
         <>
           <Pressable
-            accessibilityLabel="Close menu"
+            accessibilityLabel={t("menu.close")}
             onPress={() => setOpen(false)}
             style={{ position: "fixed" as "absolute", top: -2000, left: -2000, right: -2000, bottom: -2000, zIndex: 1 }}
           />

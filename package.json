@@ -1,22 +1,53 @@
 {
   "name": "paseo-mdviewer",
+  "version": "0.1.0",
   "private": true,
-  "version": "0.0.0",
+  "description": "Markdown reader and editor for Paseo: tabs, Mermaid diagrams, math and live editing",
+  "keywords": [
+    "paseo",
+    "paseo-plugin",
+    "markdown",
+    "mermaid",
+    "katex",
+    "viewer",
+    "editor"
+  ],
+  "license": "MIT",
+  "author": "robinhur",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/robinhur/paseo-mdviewer.git"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "files": [
     "paseo-plugin.json",
     "OVERVIEW.md",
     "OVERVIEW.*.md",
-    "index.client.ts",
     "index.client.tsx",
     "index.server.ts",
-    "index.server.tsx",
     "client/",
     "server/",
-    "shared/"
+    "shared/",
+    "assets/",
+    "README.md",
+    "README.ko.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "scripts": {
     "build": "node scripts/build.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.tools.json",
+    "test": "tsx --test test/*.test.ts",
+    "test:browser": "tsx --test test/browser.test.mts",
+    "screenshots": "tsx scripts/screenshots.mts"
+  },
+  "overrides": {
+    "@vscode/markdown-it-katex": {
+      "katex": "$katex"
+    }
   },
   "devDependencies": {
     "@getpaseo/plugin": "0.15.4",
@@ -25,15 +56,9 @@
     "@types/katex": "^0.16.8",
     "@types/node": "^26.6.6",
     "@types/react": "~19.2.0",
-    "esbuild": "^0.28.2",
-    "react": "19.1.0",
-    "react-native": "0.81.5",
-    "tsx": "^4.23.15",
-    "typescript": "^5.9.3",
-    "zod": "^4.4.3"
-  },
-  "dependencies": {
     "@vscode/markdown-it-katex": "^1.1.2",
+    "dompurify": "^3.4.18",
+    "esbuild": "^0.28.2",
     "highlight.js": "^11.12.0",
     "js-yaml": "^5.5.0",
     "katex": "^0.19.1",
@@ -48,6 +73,12 @@
     "markdown-it-sub": "^2.0.0",
     "markdown-it-sup": "^2.0.0",
     "markdown-it-task-lists": "^2.1.1",
-    "mermaid": "^12.3.0"
+    "mermaid": "^12.3.0",
+    "playwright-core": "1.59",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "zod": "^4.4.3"
   }
 }

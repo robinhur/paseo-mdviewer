@@ -1,5 +1,7 @@
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import path from "node:path";
+import { isMarkdown } from "./files";
 
 export type RevealAction = "reveal" | "open" | "folder";
 
@@ -9,8 +11,13 @@ function run(command: string, args: string[]): Promise<void> {
   });
 }
 
-/** Shows a file in the host's file manager, or opens it or its folder with the default app. */
+/**
+ * Shows a file in the host's file manager, opens its folder, or opens a Markdown file with the
+ * default app. Opening is limited to Markdown so a link in a document cannot launch a program.
+ */
 export async function reveal(file: string, action: RevealAction) {
+  if (!existsSync(file)) return { ok: false, message: "missing" };
+  if (action === "open" && !isMarkdown(file)) return { ok: false, message: "not_markdown" };
   try {
     if (process.platform === "darwin") {
       if (action === "reveal") await run("open", ["-R", file]);

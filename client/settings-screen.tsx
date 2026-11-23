@@ -1,11 +1,13 @@
-import { useSettings, type PluginSurfaceProps } from "@getpaseo/plugin/client";
+import { useSettings, useTranslation, type PluginSurfaceProps } from "@getpaseo/plugin/client";
 import { Loading, SettingsCard, SettingsSection, SettingsSelect, SettingsSwitch } from "@getpaseo/plugin/client/ui";
 import { Text, View } from "react-native";
 import { preferences, type Preferences } from "../shared/settings";
+import { messages } from "./messages";
 
 const SCALES = ["0.8", "0.9", "1", "1.1", "1.2", "1.3", "1.5"];
 
 export function SettingsScreen({ theme }: PluginSurfaceProps) {
+  const { t } = useTranslation(messages);
   const settings = useSettings(preferences);
   if (settings.status === "loading") return <Loading />;
   if (settings.status !== "ready") {
@@ -21,60 +23,60 @@ export function SettingsScreen({ theme }: PluginSurfaceProps) {
 
   return (
     <View style={{ gap: 8 }}>
-      <SettingsSection title="Conversation">
+      <SettingsSection title={t("settings.conversation")}>
         <SettingsCard>
           <SettingsSwitch
-            label="Open buttons after each reply"
-            hint="Lists the Markdown files a reply mentions below it."
+            label={t("settings.turnButtons")}
+            hint={t("settings.turnButtonsHint")}
             value={values.turnButtons}
-            onValueChange={(v) => set("turnButtons", v)}
+            onValueChange={(value) => set("turnButtons", value)}
           />
           <SettingsSwitch
-            label="Agent card tool"
-            hint="Lets Claude and Codex post a document card with show_markdown. Applies to sessions opened after the change."
+            label={t("settings.agentTool")}
+            hint={t("settings.agentToolHint")}
             value={values.agentTool}
-            onValueChange={(v) => set("agentTool", v)}
+            onValueChange={(value) => set("agentTool", value)}
           />
         </SettingsCard>
       </SettingsSection>
-      <SettingsSection title="Viewer">
+      <SettingsSection title={t("settings.viewer")}>
         <SettingsCard>
           <SettingsSelect
-            label="Open documents in"
+            label={t("settings.defaultMode")}
             value={values.defaultMode}
             options={[
-              { label: "View", value: "preview" },
-              { label: "Split", value: "split" },
-              { label: "Source", value: "source" },
+              { label: t("mode.view"), value: "preview" },
+              { label: t("mode.split"), value: "split" },
+              { label: t("mode.source"), value: "source" },
             ]}
-            onValueChange={(v) => set("defaultMode", v as Preferences["defaultMode"])}
+            onValueChange={(value) => set("defaultMode", value as Preferences["defaultMode"])}
           />
           <SettingsSelect
-            label="Reading width"
+            label={t("settings.width")}
             value={values.width}
             options={[
-              { label: "Narrow", value: "narrow" },
-              { label: "Normal", value: "normal" },
-              { label: "Full width", value: "full" },
+              { label: t("settings.narrow"), value: "narrow" },
+              { label: t("settings.normal"), value: "normal" },
+              { label: t("settings.full"), value: "full" },
             ]}
-            onValueChange={(v) => set("width", v as Preferences["width"])}
+            onValueChange={(value) => set("width", value as Preferences["width"])}
           />
           <SettingsSelect
-            label="Text size"
-            hint="Starting size for newly opened documents. Pinch or A-/A+ changes it per tab."
+            label={t("settings.fontScale")}
+            hint={t("settings.fontScaleHint")}
             value={String(values.fontScale)}
-            options={SCALES.map((s) => ({ label: `${Math.round(Number(s) * 100)}%`, value: s }))}
-            onValueChange={(v) => set("fontScale", Number(v))}
+            options={SCALES.map((scale) => ({ label: `${Math.round(Number(scale) * 100)}%`, value: scale }))}
+            onValueChange={(value) => set("fontScale", Number(value))}
           />
         </SettingsCard>
       </SettingsSection>
-      <SettingsSection title="Editing">
+      <SettingsSection title={t("settings.editing")}>
         <SettingsCard>
           <SettingsSwitch
-            label="Save automatically"
-            hint="Off: edits stay unsaved until you press Save."
+            label={t("settings.autosave")}
+            hint={t("settings.autosaveHint")}
             value={values.autosave}
-            onValueChange={(v) => set("autosave", v)}
+            onValueChange={(value) => set("autosave", value)}
           />
         </SettingsCard>
       </SettingsSection>

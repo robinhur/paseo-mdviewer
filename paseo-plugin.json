@@ -1,8 +1,21 @@
 {
   "id": "paseo-mdviewer",
-  "media": [],
+  "name": "MDViewer",
+  "description": "Read and edit Markdown in Paseo tabs, with Mermaid diagrams, math and live preview",
+  "icon": "assets/icon.png",
+  "media": [
+    "assets/preview-dark.png",
+    "assets/diagrams-dark.png",
+    "assets/zoom-dark.png",
+    "assets/outline-light.png"
+  ],
   "requirements": {
     "paseo": ">=0.15.4"
   },
-  "name": "MDViewer"
+  "translations": {
+    "ko": {
+      "name": "MDViewer",
+      "description": "Paseo 탭에서 Markdown을 읽고 고칩니다. Mermaid 다이어그램, 수식, 실시간 미리보기를 지원합니다."
+    }
+  }
 }

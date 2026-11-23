@@ -2,7 +2,7 @@ import { defineSettings } from "@getpaseo/plugin";
 import { z } from "zod";
 
 export const preferencesSchema = z.object({
-  /** Append Open buttons for the Markdown files a finished turn mentions. */
+  /** Append Open buttons for Markdown files created or changed during a turn. */
   turnButtons: z.boolean().default(true),
   /** Give agents the `show_markdown` card tool. */
   agentTool: z.boolean().default(false),

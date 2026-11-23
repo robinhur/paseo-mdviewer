@@ -1,10 +1,8 @@
-import type { PluginClientContext, PluginWorkspacePanelProps } from "@getpaseo/plugin/client";
+import type { PluginAgentPanelProps, PluginClientContext } from "@getpaseo/plugin/client";
 import type { ComponentType } from "react";
 import { z } from "zod";
 import { rememberRpc } from "../shared/rpc";
 import { FILLED_BOOK } from "./icons";
-
-export const VIEWER_PANEL_ID = "viewer";
 
 export const viewStateSchema = z.object({
   mode: z.enum(["preview", "split", "source"]),
@@ -13,24 +11,13 @@ export const viewStateSchema = z.object({
   wide: z.boolean(),
 });
 export type ViewState = z.infer<typeof viewStateSchema>;
-export const DEFAULT_VIEW: ViewState = { mode: "preview", outline: false, scale: 1, wide: false };
 
-export const viewerTabSchema = z.object({
-  view: viewStateSchema,
-  path: z.string().nullable(),
-  line: z.number().nullable(),
-  back: z.array(z.string()),
-  forward: z.array(z.string()),
-});
-export type ViewerTabState = z.infer<typeof viewerTabSchema>;
-export const DEFAULT_VIEWER_TAB: ViewerTabState = { view: DEFAULT_VIEW, path: null, line: null, back: [], forward: [] };
-
-type PanelFactory = (path: string) => ComponentType<PluginWorkspacePanelProps>;
+type PanelFactory = (path: string) => ComponentType<PluginAgentPanelProps>;
 
 let client: PluginClientContext | null = null;
 let factory: PanelFactory | null = null;
 const registered = new Map<string, () => void>();
-const pending = new Map<string, number>();
+const pendingLines = new Map<string, number>();
 const listeners = new Set<(panelId: string) => void>();
 
 export function setClient(value: PluginClientContext | null, makePanel?: PanelFactory) {
@@ -52,33 +39,61 @@ export function panelIdFor(path: string): string {
   return `doc-${hash.toString(36)}`;
 }
 
-/** Registers the tab panel for `path` once per client session. */
+/**
+ * Registers the tab panel for `path` once per client session. Document tabs are agent panels:
+ * Paseo lists workspace panels in the new-tab menu, and one entry per opened file would flood it.
+ */
 export function ensurePanel(path: string): string {
   const id = panelIdFor(path);
   if (!registered.has(id) && client && factory) {
     const title = path.split("/").pop() ?? path;
-    registered.set(id, client.addWorkspacePanel({ id, title, icon: FILLED_BOOK, Component: factory(path) }));
+    registered.set(id, client.addAgentPanel({ id, title, icon: FILLED_BOOK, Component: factory(path) }));
   }
   return id;
 }
 
-/** Opens a Markdown file in its own tab in this workspace. */
-export function openMarkdown(workspaceId: string, path: string, line?: number) {
+export interface OpenRequest {
+  workspaceId: string;
+  /** The conversation the tab belongs to. */
+  agentId: string;
+  path: string;
+  line?: number;
+}
+
+/** Opens a Markdown file in its own tab. */
+export function openMarkdown({ workspaceId, agentId, path, line }: OpenRequest) {
   if (!client) return;
   const id = ensurePanel(path);
-  if (line != null) pending.set(id, line);
+  if (line != null) pendingLines.set(id, line);
   listeners.forEach((listener) => listener(id));
-  client.openPanel(id, { workspaceId });
+  client.openPanel(id, { workspaceId, agentId });
   void client.rpc(rememberRpc, { path }).catch(() => undefined);
 }
 
+/**
+ * Opens a Markdown file from a place that has no conversation of its own, such as a Paseo file
+ * tab, using the workspace's most recently updated conversation. Resolves false when there is none.
+ */
+export async function openFromWorkspace(workspaceId: string, path: string, line?: number): Promise<boolean> {
+  if (!client) return false;
+  const { entries } = await client.paseo.agents.list();
+  const agents = entries
+    .map((entry) => entry.agent as { id: string; workspaceId?: string; updatedAt?: string; archivedAt?: string | null })
+    .filter((agent) => agent.workspaceId === workspaceId && !agent.archivedAt)
+    .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
+  const agent = agents[0];
+  if (!agent) return false;
+  openMarkdown({ workspaceId, agentId: agent.id, path, line });
+  return true;
+}
+
 export function takePendingLine(panelId: string): number | undefined {
-  const line = pending.get(panelId);
-  pending.delete(panelId);
+  const line = pendingLines.get(panelId);
+  pendingLines.delete(panelId);
   return line;
 }
 
-export function onPending(listener: (panelId: string) => void) {
+export function onPendingLine(listener: (panelId: string) => void) {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);

@@ -45,7 +45,7 @@ export function mountFrame(
 ): MountedFrame | null {
   if (!supportsFrame || !host) return null;
   const frame = document.createElement("iframe");
-  frame.setAttribute("sandbox", "allow-scripts allow-popups");
+  frame.setAttribute("sandbox", "allow-scripts");
   frame.setAttribute("title", "Markdown preview");
   Object.assign(frame.style, {
     border: "0",

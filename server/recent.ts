@@ -1,8 +1,14 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { isMarkdown } from "./files";
 
-const LIMIT = 300;
-const file = path.join(process.env.PASEO_HOME ?? path.join(process.env.HOME ?? "", ".paseo"), "plugin-data", "paseo-mdviewer", "recent.json");
+const LIMIT = 100;
+const file = path.join(
+  process.env.PASEO_HOME ?? path.join(process.env.HOME ?? "", ".paseo"),
+  "plugin-data",
+  "paseo-mdviewer",
+  "recent.json",
+);
 
 function load(): string[] {
   try {
@@ -13,8 +19,9 @@ function load(): string[] {
   }
 }
 
-/** Remembers a file opened in its own tab, most recent last. */
+/** Remembers a Markdown file opened in its own tab, most recent last. */
 export function remember(target: string) {
+  if (!isMarkdown(target)) return {};
   const list = load().filter((p) => p !== target);
   list.push(target);
   mkdirSync(path.dirname(file), { recursive: true });
@@ -22,6 +29,7 @@ export function remember(target: string) {
   return {};
 }
 
+/** Files opened before that still exist, so their restored tabs can find a panel. */
 export function recent() {
-  return { paths: load() };
+  return { paths: load().filter((p) => isMarkdown(p) && existsSync(p)) };
 }

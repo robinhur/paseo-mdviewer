@@ -1,19 +1,28 @@
-import { useAgent, type PluginTimelineItemProps } from "@getpaseo/plugin/client";
+import { useAgent, useTranslation, type PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/ui";
 import { Pressable, Text, View } from "react-native";
 import type { CardData, FilesData } from "../shared/rpc";
 import { FILLED_BOOK } from "./icons";
+import { messages } from "./messages";
 import { isHovered } from "./pressable";
 import { openMarkdown } from "./state";
 
 type Theme = PluginTimelineItemProps["theme"];
 
-function FileChip({ name, detail, onPress, theme }: { name: string; detail: string; onPress(): void; theme: Theme }) {
+interface FileChipProps {
+  name: string;
+  detail: string;
+  label: string;
+  onPress(): void;
+  theme: Theme;
+}
+
+function FileChip({ name, detail, label, onPress, theme }: FileChipProps) {
   const c = theme.colors;
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Open ${name} in MDViewer`}
+      accessibilityLabel={label}
       onPress={onPress}
       style={(state) => ({
         flexDirection: "row",
@@ -41,40 +50,44 @@ function FileChip({ name, detail, onPress, theme }: { name: string; detail: stri
   );
 }
 
-/** Open buttons for the Markdown files a finished turn mentioned. */
+/** Open buttons for Markdown files created or changed during a turn. */
 export function FilesRow({ agentId, item, theme }: PluginTimelineItemProps<FilesData>) {
-  const workspaceId = useAgent(agentId, (a) => a.workspaceId);
-  const target = item.data.workspaceId ?? workspaceId;
-  if (!target || !item.data.files.length) return null;
+  const { t } = useTranslation(messages);
+  const workspaceId = useAgent(agentId, (agent) => agent.workspaceId);
+  if (!workspaceId || item.data.source !== "turn-changes" || !item.data.files.length) return null;
   return (
-    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-      {item.data.files.map((file) => {
-        const parts = file.path.split("/");
-        return (
-          <FileChip
-            key={file.path + (file.line ?? "")}
-            theme={theme}
-            name={parts[parts.length - 1]}
-            detail={(file.line ? `:${file.line} · ` : "") + parts.slice(-3, -1).join("/")}
-            onPress={() => openMarkdown(target, file.path, file.line)}
-          />
-        );
-      })}
+    <View style={{ gap: 6 }}>
+      <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12 }}>{t("chat.changedThisTurn")}</Text>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+        {item.data.files.map((file) => {
+          const folder = file.path.split("/").slice(-3, -1).join("/");
+          return (
+            <FileChip
+              key={file.path + (file.line ?? "")}
+              theme={theme}
+              name={file.name}
+              detail={file.line ? `${t("chat.line", { line: file.line })} · ${folder}` : folder}
+              label={t("chat.openIn", { name: file.name })}
+              onPress={() => openMarkdown({ workspaceId, agentId, path: file.path, line: file.line })}
+            />
+          );
+        })}
+      </View>
     </View>
   );
 }
 
 /** The card an agent posts with the `show_markdown` tool. */
 export function MarkdownCard({ agentId, item, theme }: PluginTimelineItemProps<CardData>) {
-  const workspaceId = useAgent(agentId, (a) => a.workspaceId);
+  const { t } = useTranslation(messages);
+  const workspaceId = useAgent(agentId, (agent) => agent.workspaceId);
   const c = theme.colors;
   const data = item.data;
-  const target = data.workspaceId ?? workspaceId;
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Open ${data.name} in MDViewer`}
-      onPress={() => target && openMarkdown(target, data.path, data.line)}
+      accessibilityLabel={t("chat.openIn", { name: data.name })}
+      onPress={() => workspaceId && openMarkdown({ workspaceId, agentId, path: data.path, line: data.line })}
       style={(state) => ({
         borderWidth: 1,
         borderColor: isHovered(state) ? c.accent : c.border,
@@ -86,20 +99,28 @@ export function MarkdownCard({ agentId, item, theme }: PluginTimelineItemProps<C
       })}
     >
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-        <View style={{ width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: c.surface2 }}>
-          <Icon name="BookOpen" size={17} color={c.accent} />
+        <View
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: c.surface2,
+          }}
+        >
+          <Icon icon={FILLED_BOOK} size={17} color={c.accent} />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={{ color: c.foreground, fontSize: 14, fontWeight: "700" }} numberOfLines={1}>
             {data.title}
           </Text>
           <Text style={{ color: c.foregroundMuted, fontSize: 12 }} numberOfLines={1}>
-            {data.name}
-            {data.line ? ` · line ${data.line}` : ""}
+            {data.line ? `${data.name} · ${t("chat.line", { line: data.line })}` : data.name}
           </Text>
         </View>
         <View style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 7, backgroundColor: c.accent }}>
-          <Text style={{ color: c.accentForeground, fontSize: 12, fontWeight: "600" }}>Open</Text>
+          <Text style={{ color: c.accentForeground, fontSize: 12, fontWeight: "600" }}>{t("chat.open")}</Text>
         </View>
       </View>
       {data.headings.length ? (

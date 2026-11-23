@@ -1,58 +1,61 @@
-import { PluginFileConflictError, useFileText, useRpc, useTabState, type PluginFilePanelProps } from "@getpaseo/plugin/client";
-import { useCallback, useEffect } from "react";
-import { logRpc } from "../shared/rpc";
+import {
+  useRpc,
+  useTabState,
+  useTranslation,
+  type PluginFilePanelProps,
+} from "@getpaseo/plugin/client";
+import { useToast } from "@getpaseo/plugin/client/ui";
+import { useCallback } from "react";
+import { reportRpc } from "../shared/rpc";
 import { PanelBoundary } from "./boundary";
-import { DocumentView, type SaveResult } from "./document";
+import { DocumentView } from "./document";
+import { messages } from "./messages";
 import { defaultView, usePreferences } from "./preferences";
-import { openMarkdown, viewStateSchema } from "./state";
+import { openFromWorkspace, viewStateSchema } from "./state";
+import { useMarkdownFile } from "./use-markdown-file";
 
 /** Renders a Markdown file inside Paseo's own file tab. */
 export function MarkdownFilePanel(props: PluginFilePanelProps) {
-  const log = useRpc(logRpc);
-  const report = (message: string) => void log({ message }).catch(() => undefined);
-  useEffect(() => {
-    report(`file panel mounted ${props.file.path}`);
-  }, [props.file.path]);
+  const report = useRpc(reportRpc);
+  const { t } = useTranslation(messages);
   return (
-    <PanelBoundary name="file panel" report={report} color={props.theme.colors.statusDanger}>
+    <PanelBoundary
+      name={`file tab ${props.file.path}`}
+      report={(message) => void report({ message }).catch(() => undefined)}
+      describe={(message) => t("file.failed", { message })}
+      color={props.theme.colors.statusDanger}
+    >
       <FilePanelBody {...props} />
     </PanelBoundary>
   );
 }
 
 function FilePanelBody({ file, tab, theme, layout, params, revision, workspaceId }: PluginFilePanelProps) {
-  const text = useFileText(file);
+  const { t } = useTranslation(messages);
+  const toast = useToast();
+  const document = useMarkdownFile(file.path);
   const prefs = usePreferences();
   const [view, setView] = useTabState(tab, viewStateSchema, defaultView(prefs));
 
-  const save = useCallback(
-    async (value: string, force = false): Promise<SaveResult> => {
-      try {
-        await file.writeText(value, force ? { force: true } : undefined);
-        return { status: "ok" };
-      } catch (error) {
-        if (error instanceof PluginFileConflictError) return { status: "conflict" };
-        return { status: "error", message: (error as Error).message };
-      }
-    },
-    [file],
-  );
-
+  // A file tab has no conversation of its own, so a linked document opens beside the
+  // workspace's latest conversation.
   const onOpen = useCallback(
     (path: string, line?: number) => {
       if (path === file.path) return;
-      openMarkdown(workspaceId, path, line);
+      openFromWorkspace(workspaceId, path, line).then(
+        (opened) => {
+          if (!opened) toast.error(t("toast.noConversation"));
+        },
+        () => toast.error(t("toast.openFailed")),
+      );
     },
-    [file.path, workspaceId],
+    [file.path, workspaceId, toast, t],
   );
 
   return (
     <DocumentView
       path={file.path}
-      text={text.status === "ready" ? text.text : undefined}
-      error={text.status === "error" ? text.error.message : undefined}
-      save={save}
-      reload={() => undefined}
+      {...document}
       view={view}
       setView={setView}
       line={params.lineStart ?? null}

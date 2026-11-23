@@ -1,84 +1,112 @@
-# 아키텍처
+# Architecture
 
-MDViewer는 Paseo 안에서 Markdown 파일을 열고, 읽기 좋게 그리고, 바로 고칠 수 있게 하는 플러그인이다. 데몬이 Markdown을 HTML로 바꾸고, 앱은 탭 안의 격리된 iframe에서 그 HTML과 다이어그램·수식을 그린다.
+MDViewer is a Paseo plugin that opens Markdown files, draws them for reading, and lets you edit them in the same tab. The daemon turns Markdown into HTML, and the app shows that HTML in an isolated iframe where diagrams are drawn.
 
-## 목표와 비목표
+한국어: [docs/ko/ARCHITECTURE.md](ko/ARCHITECTURE.md)
 
-목표
-- Paseo 안에서 `.md` 파일을 클릭 한 번으로 연다. 대화 속 링크, 파일 트리, 검색, 턴 끝 버튼 모두 같은 뷰어로 열린다.
-- GitHub 수준의 Markdown과 Mermaid·수식을 데스크톱에서 보기 좋게 그린다.
-- 보기·분할·원문 모드로 같은 탭에서 바로 편집하고 저장한다.
-- 에이전트(Claude, Codex)가 만든 문서를 사람이 놓치지 않게 한다.
+## Goals and non-goals
 
-비목표
-- 대화 답변 렌더링을 대신하지 않는다. 답변은 Paseo 기본 렌더러나 다른 플러그인이 그린다.
-- 범용 코드 에디터가 아니다. 원문 편집은 일반 텍스트 입력이다.
-- Markdown 외 문서(PDF, Office)는 다루지 않는다.
+Goals
 
-## 전체 구조
+- Open a `.md` file in Paseo with one click. Links in replies, the Files tree, search and the buttons under a reply all lead to the same viewer.
+- Draw GitHub-level Markdown, Mermaid diagrams and math well on the desktop.
+- Edit and save in the same tab, in View, Split or Source mode.
+- Make sure a document an agent wrote is not missed.
+- Treat every document as untrusted content.
 
-| 위치 | 실행 환경 | 맡는 일 |
+Non-goals
+
+- It does not draw replies in a conversation. Paseo or another plugin does that.
+- It is not a code editor. Source editing is a plain text input.
+- It does not handle other document types such as PDF or Office files.
+
+## Structure
+
+| Location | Runs in | Does |
 |---|---|---|
-| `engine/render.ts` | 빌드 시 번들 | markdown-it과 플러그인, highlight.js, KaTeX로 Markdown → HTML |
-| `server/` | 데몬 하위 프로세스 | RPC 처리, 파일 읽기·쓰기·감시, Finder 열기, 턴 끝 버튼, 에이전트 도구 |
-| `server/generated/` | 빌드 산출물 | `engine.js`(렌더러 번들), `runtime.ts`(Mermaid 스크립트와 KaTeX CSS·글꼴) |
-| `client/` | Paseo 앱 | 파일 패널, 파일별 탭, 툴바, 경로 메뉴, 설정 화면, 대화 행 렌더러 |
-| `client/shell.ts` | iframe 안 | 디자인 CSS, Mermaid 실행, 목차, 찾기, 확대 창, 링크·복사·체크박스 처리 |
-| `shared/` | 양쪽 | RPC 계약, 설정 스키마, 경로 추출 |
+| `engine/render.ts` | Bundled at build time | Markdown to HTML with markdown-it and its plugins, highlight.js and KaTeX |
+| `server/` | Daemon subprocess | RPC handlers, Markdown file access, the file manager, reply buttons, the agent tool |
+| `server/generated/` | Build output | `engine.js` (the renderer bundle) and `runtime.ts` (Mermaid, DOMPurify, KaTeX styles and fonts) |
+| `client/` | Paseo app | File panel, per-file tabs, toolbar, path menu, settings screen, conversation rows, translations |
+| `client/shell.ts` | Inside the iframe | Styles, sanitizing, Mermaid, outline, find, zoom, and link, copy and checkbox handling |
+| `shared/` | Both | RPC contracts, settings schema, path matching, text edits |
+| `scripts/` | Development machine | Renderer bundle, runtime embedding, third-party notices (`build.mjs`), screenshots (`screenshots.mts`) |
 
-데몬은 플러그인 서버 코드를 자체 번들러로 묶고, 가져온 패키지의 타입 선언까지 따라간다. markdown-it·highlight.js처럼 타입 선언을 따라갈 수 없는 패키지가 있어 렌더러는 `scripts/build.mjs`가 미리 `server/generated/engine.js`로 묶는다. 같은 이유로 Mermaid와 KaTeX 자원도 실행 중 `node_modules`를 읽지 않고 생성 모듈에 문자열로 넣는다.
+The daemon bundles a plugin's server code with its own bundler and follows the type declarations of imported packages. markdown-it and highlight.js ship declarations it cannot follow, so `scripts/build.mjs` bundles the renderer into `server/generated/engine.js` ahead of time. For the same reason Mermaid, DOMPurify and KaTeX are embedded as strings in a generated module instead of being read from `node_modules` at run time. The plugin therefore has no runtime dependencies.
 
-## 주요 흐름
+## Main flows
 
-### 파일 열기
+### Opening a file
 
-1. 사용자가 대화 링크, 파일 트리, 검색 결과에서 `.md`를 연다.
-2. Paseo가 파일 탭을 만들고, 등록된 파일 패널 중 기억된 선택(MDViewer)으로 연다.
-3. 파일 패널이 `useFileText`로 내용을 읽고 변경을 감시한다.
-4. 렌더 RPC가 HTML을 돌려주면 iframe에 `postMessage`로 넘긴다.
+1. The user opens a `.md` file from a reply link, the Files tree or a search result.
+2. Paseo creates a file tab and uses the remembered viewer for the extension, MDViewer.
+3. Both panel types read through `useMarkdownFile`, which follows changes on disk through the daemon.
+4. The render RPC returns HTML, and the panel passes it to the iframe with `postMessage`.
 
-턴 끝 버튼, `/mdv`, 문서 안 링크, 에이전트 카드는 파일별 워크스페이스 패널(`doc-<경로 해시>`)을 연다. 같은 파일은 같은 패널 ID라서 기존 탭으로 이동한다. 연 파일 목록은 데몬(`plugin-data/paseo-mdviewer/recent.json`)에 남겨, 재시작 뒤 복원된 탭이 자기 패널을 찾게 한다.
+Reply buttons, `/mdv`, links inside a document and the agent card open a per-file tab instead. Each file has an agent panel with the id `doc-<path hash>`, so opening the same file from the same conversation focuses its tab. These tabs are agent panels because Paseo lists every workspace panel in the new-tab menu, where one entry per opened file would flood it. The daemon keeps the list of opened files in `plugin-data/paseo-mdviewer/recent.json` and the client registers their panels at startup, so tabs Paseo restores find their panel.
 
-### 그리기
+A Paseo file tab has no conversation of its own. A link to another Markdown file inside it opens beside the workspace's most recently updated conversation.
 
-- 데몬: front matter 분리 → markdown-it 렌더 → 블록마다 `data-line` 부여 → 로컬 이미지는 data URI로, 로컬 링크는 `data-path`로 바꾼다.
-- iframe: HTML을 넣고, Mermaid 블록을 하나씩 SVG로 바꾼다. 같은 다이어그램은 캐시를 재사용해 편집 중 깜빡임을 줄인다.
-- iframe은 `sandbox="allow-scripts allow-popups"`로 앱과 출처가 분리된다. 앱과는 `postMessage`로만 주고받는다.
+### Drawing
 
-### 편집과 저장
+- Daemon: split off front matter, render with markdown-it, give each block a `data-line`, embed local images as data URIs, and mark local links with `data-path`.
+- iframe: sanitize the HTML, insert it, then turn each Mermaid block into SVG. Diagram colors come from the Paseo theme through Mermaid's `base` theme and theme variables. A diagram that did not change reuses its cached SVG, which avoids flicker while editing.
 
-- 분할·원문 모드에서 입력하면 초안이 생기고, 0.14초 뒤 다시 그린다.
-- 자동 저장이 켜져 있으면 입력을 멈추고 0.7초 뒤 저장한다. 꺼져 있으면 툴바의 Save 버튼으로 저장한다.
-- 파일 패널은 Paseo 파일 핸들로, 파일별 탭은 `mtime` 비교 RPC로 저장한다. 다른 곳에서 파일이 바뀌었으면 충돌 배너에서 버리기·덮어쓰기를 고른다.
+### Editing and saving
 
-### 턴 끝 버튼
+- Typing in Split or Source mode creates a draft, which is drawn again after 0.14 seconds.
+- With automatic saving on, the draft is saved 0.7 seconds after typing stops. Unsaved edits also have a Save button. New input during a save remains dirty for the next save.
+- Both panel types use the same versioned RPC. The draft keeps the content version from its first edit; polling cannot advance that baseline. External changes stop automatic saving and preserve the draft until the user discards it or explicitly overwrites. Deletion and read errors keep unsaved text accessible.
+- The daemon serializes writes per resolved path, checks the expected content version, writes a complete temporary file beside the original, and rechecks before replacing it. Markdown symlinks keep pointing at their target; file permissions and a UTF-8 BOM are preserved. Missing files and non-Markdown targets are refused.
+- Other programs do not share this process-local queue. A concurrent external write between the final check and replacement is not protected by an OS-level compare-and-swap.
 
-1. `agent.turn.after` 훅이 끝난 턴의 타임라인 끝부분을 다시 읽는다.
-2. 마지막 사용자 메시지 뒤 답변 글에서 Markdown 경로를 뽑는다.
-3. 경로를 작업 폴더 기준으로 찾고, 없으면 작업 폴더 아래에서 같은 이름을 찾는다(깊이 8, 디렉터리 4,000개, 30초 캐시).
-4. 실제 있는 파일만 최대 12개를 버튼 행(`mdviewer-files`)으로 붙인다. 행 ID는 매번 새로 만든다.
+### Changed-document buttons
 
-## 불변 조건
+1. The `agent.turn.before` hook records a bounded snapshot of regular Markdown file paths and metadata under the agent's working directory. Hidden entries, dependency and build directories, and symbolic links are skipped. The scan does not read file contents.
+2. The matching `agent.turn.after` hook records its observed end time before waiting for settings or scanning, then compares a fresh snapshot with the start snapshot. A file is a candidate only when it was created or its metadata changed, and its filesystem change time is not later than the observed end (at millisecond resolution). Reply text and its Markdown formatting are not inputs.
+3. Up to 12 candidates, newest first, are appended as a `mdviewer-files` row with `source: "turn-changes"` and the heading "Documents changed this turn". Older mention-based rows still parse but are hidden; stored timeline entries are not deleted.
+4. No changes or no matching start snapshot means no row. Completed directories retain their direct entry names. Even if another subtree exceeds the scan limit, a completed parent or ancestor can prove that a document or its containing folder is new. An existing but unscanned path is not assumed to be new.
 
-- iframe 밖의 앱 코드는 DOM을 직접 만지지 않는다. DOM 접근은 `client/web.ts`에만 있고 웹 플랫폼에서만 동작한다.
-- 모바일 등 웹이 아닌 환경에서는 iframe 대신 Paseo 기본 Markdown 컴포넌트로 보여 준다.
-- 타임라인 행의 `kind`는 소문자·숫자·하이픈만 쓴다.
-- 앱 텍스트 색은 모두 Paseo 테마 값에서 가져온다.
+The turn-start notification is asynchronous, not a barrier before the agent runs. Very early changes can precede the scan, and bounded scans can miss files. Changes by another program or agent in the same directory also count. This is a file-change signal, not a claim about authorship or importance. Existing file links, file panels and `/mdv` keep their normal opening behavior.
 
-## 실패 처리
+## Security
 
-| 상황 | 동작 |
+A Markdown file can carry HTML, and it may come from a repository the user did not write.
+
+- The iframe is created with `sandbox="allow-scripts"`. It has an opaque origin and no access to the app.
+- The preview document sets a content security policy: scripts need the document's nonce, styles may be inline, images may be `data:` or `https:`, fonts may be `data:`, and everything else, including `connect-src`, is `'none'`.
+- DOMPurify sanitizes the rendered HTML before it is inserted. `style`, `form`, `iframe`, `object`, `embed`, `base`, `link` and `meta` are also dropped.
+- Mermaid runs with `securityLevel: "strict"`.
+- The viewer's own element ids start with `mdv-`, so a heading id cannot take over the viewer's styling.
+- The panel accepts these messages from the iframe: `ready`, `open`, `external`, `copy`, `toggleTask`, `scale`. `external` opens `http`, `https` and `mailto` links only. `open` opens Markdown files in MDViewer and reveals any other local file in the file manager.
+- The daemon's read, stat, write and remember handlers refuse paths that are not Markdown files. Writing never creates a file. The file manager's "open" action works for Markdown files only.
+
+`test/browser.test.mts` loads hostile documents into the real preview document and checks these properties.
+
+## Invariants
+
+- App code outside the iframe does not touch the DOM. DOM access lives in `client/web.ts` and only runs on the web platform.
+- On platforms without a web view the tab shows the document with Paseo's own Markdown component.
+- Timeline row kinds use lowercase letters, digits and hyphens.
+- All text colors in the app come from the Paseo theme, and all interface text comes from `client/locales/`.
+- Server responses carry codes, not sentences. The client translates them.
+
+## Failure handling
+
+| Situation | Behavior |
 |---|---|
-| 렌더 RPC 실패 | 이전 렌더 결과를 유지한다 |
-| Mermaid 문법 오류 | 그 블록 자리에 오류 문구를 보여 주고 나머지는 계속 그린다 |
-| 파일 삭제 | "File not found"를 보여 준다 |
-| 저장 충돌 | 배너로 버리기·덮어쓰기를 묻는다 |
-| 패널 렌더 오류 | 오류 문구를 보여 주고 플러그인 로그에 남긴다 |
-| 턴 끝 처리 실패 | 버튼 행을 붙이지 않고 플러그인 로그에 남긴다 |
+| Render RPC fails | The previous render stays |
+| The sanitizer did not load | The document is not shown, and a message says why |
+| Mermaid syntax error | That block shows the error and the rest is drawn |
+| File deleted | The tab shows "File not found" |
+| Save conflict | A banner asks to discard or overwrite |
+| A panel throws while rendering | The tab shows the error and reports it to the plugin log |
+| The turn hook fails | No button row is added, and the error goes to the plugin log |
 
-## 알려진 한계
+## Known limits
 
-- Paseo 파일 탭의 아이콘은 Paseo가 파일 종류로 정한다. 플러그인은 바꿀 수 없다.
-- 답변 본문 속 경로를 링크로 바꾸는 일은 답변을 그리는 쪽이 한다. `better-paseo`의 "Plugin markdown for replies"가 켜져 있으면 링크가 맥 기본 앱으로 열린다.
-- 같은 파일이 Paseo 파일 탭(링크로 연 것)과 파일별 탭(버튼으로 연 것)으로 따로 열릴 수 있다. 플러그인이 Paseo 파일 탭을 직접 여는 API가 없다.
-- Finder 열기는 데몬이 도는 기기에서 실행된다.
+- Paseo chooses the icon of its file tabs by file type. A plugin cannot change it.
+- The party that draws a reply decides how its links open. With Better Paseo's "Plugin markdown for replies" on, links open with the operating system.
+- On Paseo 0.16.2, plugin timeline rows do not receive the host's file-link resolver context. The public `Markdown` component can draw a file link there but cannot open its tab. SDK 0.15.4 also exposes no native file-tab opener, so reply buttons retain per-file plugin panels. See the [host timeline boundary](https://github.com/getpaseo/paseo/blob/2ee30f4164af42ba209236ab3a31bf9532592fc3/packages/app/src/agent-stream/view.tsx#L945-L948).
+- A per-file tab belongs to the conversation it was opened from.
+- File manager actions run on the machine the daemon runs on.

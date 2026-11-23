@@ -482,9 +482,9 @@ var require_markdown_it_task_lists = __commonJS({
   }
 });
 
-// node_modules/@vscode/markdown-it-katex/node_modules/katex/dist/katex.js
+// node_modules/katex/dist/katex.js
 var require_katex = __commonJS({
-  "node_modules/@vscode/markdown-it-katex/node_modules/katex/dist/katex.js"(exports, module) {
+  "node_modules/katex/dist/katex.js"(exports, module) {
     (function webpackUniversalModuleDefinition(root, factory) {
       if (typeof exports === "object" && typeof module === "object")
         module.exports = factory();
@@ -724,15 +724,16 @@ var require_katex = __commonJS({
             }
           }
           function getDefaultValue(schema) {
-            if (schema.default !== void 0) {
+            if (Object.prototype.hasOwnProperty.call(schema, "default") && schema.default !== void 0) {
               return schema.default;
             }
             const type = Array.isArray(schema.type) ? schema.type[0] : schema.type;
             return getImplicitDefault(type);
           }
           function applySetting(target, prop, options, schema) {
-            const optionValue = options[prop];
-            target[prop] = optionValue !== void 0 ? schema.processor ? schema.processor(optionValue) : optionValue : getDefaultValue(schema);
+            const optionValue = Object.prototype.hasOwnProperty.call(options, prop) ? options[prop] : void 0;
+            const processor = Object.prototype.hasOwnProperty.call(schema, "processor") ? schema.processor : void 0;
+            target[prop] = optionValue !== void 0 ? processor ? processor(optionValue) : optionValue : getDefaultValue(schema);
           }
           class Settings {
             constructor(options) {
@@ -759,54 +760,6 @@ var require_katex = __commonJS({
                 if (schema) {
                   applySetting(this, prop, options, schema);
                 }
-              }
-            }
-            /**
-             * Report nonstrict (non-LaTeX-compatible) input.
-             * Can safely not be called if `this.strict` is false in JavaScript.
-             */
-            reportNonstrict(errorCode, errorMsg, token) {
-              let strict = this.strict;
-              if (typeof strict === "function") {
-                strict = strict(errorCode, errorMsg, token);
-              }
-              if (!strict || strict === "ignore") {
-                return;
-              } else if (strict === true || strict === "error") {
-                throw new src_ParseError("LaTeX-incompatible input and strict mode is set to 'error': " + (errorMsg + " [" + errorCode + "]"), token);
-              } else if (strict === "warn") {
-                typeof console !== "undefined" && console.warn("LaTeX-incompatible input and strict mode is set to 'warn': " + (errorMsg + " [" + errorCode + "]"));
-              } else {
-                typeof console !== "undefined" && console.warn("LaTeX-incompatible input and strict mode is set to " + ("unrecognized '" + strict + "': " + errorMsg + " [" + errorCode + "]"));
-              }
-            }
-            /**
-             * Check whether to apply strict (LaTeX-adhering) behavior for unusual
-             * input (like `\\`).  Unlike `nonstrict`, will not throw an error;
-             * instead, "error" translates to a return value of `true`, while "ignore"
-             * translates to a return value of `false`.  May still print a warning:
-             * "warn" prints a warning and returns `false`.
-             * This is for the second category of `errorCode`s listed in the README.
-             */
-            useStrictBehavior(errorCode, errorMsg, token) {
-              let strict = this.strict;
-              if (typeof strict === "function") {
-                try {
-                  strict = strict(errorCode, errorMsg, token);
-                } catch (error) {
-                  strict = "error";
-                }
-              }
-              if (!strict || strict === "ignore") {
-                return false;
-              } else if (strict === true || strict === "error") {
-                return true;
-              } else if (strict === "warn") {
-                typeof console !== "undefined" && console.warn("LaTeX-incompatible input and strict mode is set to 'warn': " + (errorMsg + " [" + errorCode + "]"));
-                return false;
-              } else {
-                typeof console !== "undefined" && console.warn("LaTeX-incompatible input and strict mode is set to " + ("unrecognized '" + strict + "': " + errorMsg + " [" + errorCode + "]"));
-                return false;
               }
             }
             /**
@@ -3919,10 +3872,8 @@ var require_katex = __commonJS({
               const metrics = fontMetricsBySizeIndex[sizeIndex] = {
                 cssEmPerMu: sigmasAndXis.quad[sizeIndex] / 18
               };
-              for (const key in sigmasAndXis) {
-                if (sigmasAndXis.hasOwnProperty(key)) {
-                  metrics[key] = sigmasAndXis[key][sizeIndex];
-                }
+              for (const key of Object.keys(sigmasAndXis)) {
+                metrics[key] = sigmasAndXis[key][sizeIndex];
               }
             }
             return fontMetricsBySizeIndex[sizeIndex];
@@ -4789,6 +4740,44 @@ var require_katex = __commonJS({
             }
           };
           ;
+          function handleStrict(params) {
+            const strict = params.strict, errorCode = params.errorCode, errorMsg = params.errorMsg, token = params.token, report = params.report;
+            let behavior = strict;
+            if (typeof strict === "function") {
+              if (report) {
+                behavior = strict(errorCode, errorMsg, token);
+              } else {
+                try {
+                  behavior = strict(errorCode, errorMsg, token);
+                } catch (error) {
+                  behavior = "error";
+                }
+              }
+            }
+            switch (behavior) {
+              case true:
+              case "error":
+                if (report) {
+                  throw new src_ParseError("LaTeX-incompatible input and strict mode is set to 'error': " + (errorMsg + " [" + errorCode + "]"), token);
+                } else {
+                  return true;
+                }
+              case false:
+              case "ignore":
+                if (!report) {
+                  return false;
+                }
+                break;
+              case "warn":
+              default:
+                typeof console !== "undefined" && console.warn("LaTeX-incompatible input and strict mode is set to 'warn': " + (errorMsg + " [" + errorCode + "]"));
+                if (!report) {
+                  return false;
+                }
+                break;
+            }
+          }
+          ;
           const lookupSymbol = function(value, fontName, mode) {
             if (src_symbols[mode][value]) {
               const replacement = src_symbols[mode][value].replace;
@@ -4813,18 +4802,21 @@ var require_katex = __commonJS({
               }
               symbolNode = new SymbolNode(value, metrics.height, metrics.depth, italic2, metrics.skew, metrics.width, classes);
             } else {
-              typeof console !== "undefined" && console.warn("No character metrics " + ("for '" + value + "' in style '" + fontName + "' and mode '" + mode + "'"));
+              handleStrict({
+                strict: options.strict,
+                errorCode: "symbolNotInFont",
+                errorMsg: "No character metrics for '" + value + "' in style '" + fontName + "' and mode '" + mode + "'",
+                report: true
+              });
               symbolNode = new SymbolNode(value, 0, 0, 0, 0, 0, classes);
             }
-            if (options) {
-              symbolNode.maxFontSize = options.sizeMultiplier;
-              if (options.style.isTight()) {
-                symbolNode.classes.push("mtight");
-              }
-              const color = options.getColor();
-              if (color) {
-                symbolNode.style.color = color;
-              }
+            symbolNode.maxFontSize = options.sizeMultiplier;
+            if (options.style.isTight()) {
+              symbolNode.classes.push("mtight");
+            }
+            const color = options.getColor();
+            if (color) {
+              symbolNode.style.color = color;
             }
             return symbolNode;
           };
@@ -4853,16 +4845,12 @@ var require_katex = __commonJS({
               };
             }
           };
-          const makeOrd = function(group, options, type) {
+          const makeOrd = function(group, options) {
+            const type = group.type === "mathord" ? "mathord" : "textord";
             const mode = group.mode;
             const text2 = group.text;
             const classes = ["mord"];
-            const {
-              font,
-              fontFamily,
-              fontWeight,
-              fontShape
-            } = options;
+            const font = options.font, fontFamily = options.fontFamily, fontWeight = options.fontWeight, fontShape = options.fontShape;
             const useFont = mode === "math" || mode === "text" && !!font;
             const fontOrFamily = useFont ? font : fontFamily;
             let wideFontName = "";
@@ -4890,7 +4878,7 @@ var require_katex = __commonJS({
               }
               if (lookupSymbol(text2, fontName, mode).metrics) {
                 return makeSymbol(text2, fontName, mode, options, classes.concat(fontClasses));
-              } else if (ligatures.hasOwnProperty(text2) && fontName.slice(0, 10) === "Typewriter") {
+              } else if (Object.prototype.hasOwnProperty.call(ligatures, text2) && fontName.slice(0, 10) === "Typewriter") {
                 const parts = [];
                 for (let i = 0; i < text2.length; i++) {
                   parts.push(makeSymbol(text2[i], fontName, mode, options, classes.concat(fontClasses)));
@@ -5052,10 +5040,7 @@ var require_katex = __commonJS({
             };
           };
           const makeVList = function(params, options) {
-            const {
-              children,
-              depth
-            } = getVListChildrenAndDepth(params);
+            const _getVListChildrenAndD = getVListChildrenAndDepth(params), children = _getVListChildrenAndD.children, depth = _getVListChildrenAndD.depth;
             let pstrutSize = 0;
             for (let i = 0; i < children.length; i++) {
               const child = children[i];
@@ -5215,7 +5200,7 @@ var require_katex = __commonJS({
             oiiintSize2: ["oiiintSize2", 1.98, 0.659]
           };
           const staticSvg = function(value, options) {
-            const [pathName, width, height] = svgData[value];
+            const _svgData$value = svgData[value], pathName = _svgData$value[0], width = _svgData$value[1], height = _svgData$value[2];
             const path3 = new PathNode(pathName);
             const svgNode = new SvgNode([path3], {
               "width": makeEm(width),
@@ -5225,7 +5210,7 @@ var require_katex = __commonJS({
               "viewBox": "0 0 " + 1e3 * width + " " + 1e3 * height,
               "preserveAspectRatio": "xMinYMin"
             });
-            const span = makeSvgSpan(["overlay"], [svgNode], options);
+            const span = makeSvgSpan(["katex-overlay"], [svgNode], options);
             span.height = height;
             span.style.height = makeEm(height);
             span.style.width = makeEm(width);
@@ -5318,27 +5303,8 @@ var require_katex = __commonJS({
           const _functions = {};
           const _htmlGroupBuilders = {};
           const _mathmlGroupBuilders = {};
-          function defineFunction(_ref) {
-            let {
-              type,
-              names,
-              props,
-              handler,
-              htmlBuilder: htmlBuilder2,
-              mathmlBuilder: mathmlBuilder2
-            } = _ref;
-            const data = {
-              type,
-              numArgs: props.numArgs,
-              argTypes: props.argTypes,
-              allowedInArgument: !!props.allowedInArgument,
-              allowedInText: !!props.allowedInText,
-              allowedInMath: props.allowedInMath === void 0 ? true : props.allowedInMath,
-              numOptionalArgs: props.numOptionalArgs || 0,
-              infix: !!props.infix,
-              primitive: !!props.primitive,
-              handler
-            };
+          function defineFunction(data) {
+            const type = data.type, names = data.names, htmlBuilder2 = data.htmlBuilder, mathmlBuilder2 = data.mathmlBuilder;
             for (let i = 0; i < names.length; ++i) {
               _functions[names[i]] = data;
             }
@@ -5351,24 +5317,14 @@ var require_katex = __commonJS({
               }
             }
           }
-          function defineFunctionBuilders(_ref2) {
-            let {
-              type,
-              htmlBuilder: htmlBuilder2,
-              mathmlBuilder: mathmlBuilder2
-            } = _ref2;
-            defineFunction({
-              type,
-              names: [],
-              props: {
-                numArgs: 0
-              },
-              handler() {
-                throw new Error("Should never be called.");
-              },
-              htmlBuilder: htmlBuilder2,
-              mathmlBuilder: mathmlBuilder2
-            });
+          function defineFunctionBuilders(_ref) {
+            let type = _ref.type, htmlBuilder2 = _ref.htmlBuilder, mathmlBuilder2 = _ref.mathmlBuilder;
+            if (htmlBuilder2) {
+              _htmlGroupBuilders[type] = htmlBuilder2;
+            }
+            if (mathmlBuilder2) {
+              _mathmlGroupBuilders[type] = mathmlBuilder2;
+            }
           }
           const normalizeArgument = function(arg) {
             return arg.type === "ordgroup" && arg.body.length === 1 ? arg.body[0] : arg;
@@ -5475,7 +5431,7 @@ var require_katex = __commonJS({
               }
               if (nonspace) {
                 prev.node = node;
-              } else if (isRoot && node.hasClass("newline")) {
+              } else if (isRoot && node.hasClass("katex-newline")) {
                 prev.node = makeSpan(["leftmost"]);
               }
               prev.insertAfter = /* @__PURE__ */ ((index) => (n) => {
@@ -5539,8 +5495,8 @@ var require_katex = __commonJS({
             }
           };
           function buildHTMLUnbreakable(children, options) {
-            const body = makeSpan(["base"], children, options);
-            const strut = makeSpan(["strut"]);
+            const body = makeSpan(["katex-base"], children, options);
+            const strut = makeSpan(["katex-strut"]);
             strut.style.height = makeEm(body.height + body.depth);
             if (body.depth) {
               strut.style.verticalAlign = makeEm(-body.depth);
@@ -5556,7 +5512,7 @@ var require_katex = __commonJS({
             }
             const expression = buildExpression(tree, options, "root");
             let eqnNum;
-            if (expression.length === 2 && expression[1].hasClass("tag")) {
+            if (expression.length === 2 && expression[1].hasClass("katex-tag")) {
               eqnNum = expression.pop();
             }
             const children = [];
@@ -5565,7 +5521,7 @@ var require_katex = __commonJS({
               parts.push(expression[i]);
               if (expression[i].hasClass("mbin") || expression[i].hasClass("mrel") || expression[i].hasClass("allowbreak")) {
                 let nobreak = false;
-                while (i < expression.length - 1 && expression[i + 1].hasClass("mspace") && !expression[i + 1].hasClass("newline")) {
+                while (i < expression.length - 1 && expression[i + 1].hasClass("mspace") && !expression[i + 1].hasClass("katex-newline")) {
                   i++;
                   parts.push(expression[i]);
                   if (expression[i].hasClass("nobreak")) {
@@ -5576,7 +5532,7 @@ var require_katex = __commonJS({
                   children.push(buildHTMLUnbreakable(parts, options));
                   parts = [];
                 }
-              } else if (expression[i].hasClass("newline")) {
+              } else if (expression[i].hasClass("katex-newline")) {
                 parts.pop();
                 if (parts.length > 0) {
                   children.push(buildHTMLUnbreakable(parts, options));
@@ -5591,7 +5547,7 @@ var require_katex = __commonJS({
             let tagChild;
             if (tag) {
               tagChild = buildHTMLUnbreakable(buildExpression(tag, options, true), options);
-              tagChild.classes = ["tag"];
+              tagChild.classes = ["katex-tag"];
               children.push(tagChild);
             } else if (eqnNum) {
               children.push(eqnNum);
@@ -5640,10 +5596,10 @@ var require_katex = __commonJS({
              */
             toNode() {
               const node = document.createElementNS("http://www.w3.org/1998/Math/MathML", this.type);
-              for (const attr in this.attributes) {
-                if (Object.prototype.hasOwnProperty.call(this.attributes, attr)) {
-                  node.setAttribute(attr, this.attributes[attr]);
-                }
+              for (const _ref of Object.entries(this.attributes)) {
+                const attr = _ref[0];
+                const value = _ref[1];
+                node.setAttribute(attr, value);
               }
               if (this.classes.length > 0) {
                 node.className = createClass(this.classes);
@@ -5666,12 +5622,12 @@ var require_katex = __commonJS({
              */
             toMarkup() {
               let markup = "<" + this.type;
-              for (const attr in this.attributes) {
-                if (Object.prototype.hasOwnProperty.call(this.attributes, attr)) {
-                  markup += " " + attr + '="';
-                  markup += utils_escape(this.attributes[attr]);
-                  markup += '"';
-                }
+              for (const _ref2 of Object.entries(this.attributes)) {
+                const attr = _ref2[0];
+                const value = _ref2[1];
+                markup += " " + attr + '="';
+                markup += utils_escape(value);
+                markup += '"';
               }
               if (this.classes.length > 0) {
                 markup += ' class ="' + utils_escape(createClass(this.classes)) + '"';
@@ -5781,7 +5737,8 @@ var require_katex = __commonJS({
           const noVariantSymbols = /* @__PURE__ */ new Set(["\\imath", "\\jmath"]);
           const rowLikeTypes = /* @__PURE__ */ new Set(["mrow", "mtable"]);
           const makeText = function(text2, mode, options) {
-            if (src_symbols[mode][text2] && src_symbols[mode][text2].replace && text2.charCodeAt(0) !== 55349 && !(ligatures.hasOwnProperty(text2) && options && (options.fontFamily && options.fontFamily.slice(4, 6) === "tt" || options.font && options.font.slice(4, 6) === "tt"))) {
+            var _options$fontFamily, _options$font;
+            if (src_symbols[mode][text2] && src_symbols[mode][text2].replace && text2.charCodeAt(0) !== 55349 && !(Object.prototype.hasOwnProperty.call(ligatures, text2) && ((options == null || (_options$fontFamily = options.fontFamily) == null ? void 0 : _options$fontFamily.slice(4, 6)) === "tt" || (options == null || (_options$font = options.font) == null ? void 0 : _options$font.slice(4, 6)) === "tt"))) {
               text2 = src_symbols[mode][text2].replace;
             }
             return new TextNode(text2);
@@ -6006,6 +5963,7 @@ var require_katex = __commonJS({
               this.maxSize = void 0;
               this.minRuleThickness = void 0;
               this._fontMetrics = void 0;
+              this.strict = void 0;
               this.style = data.style;
               this.color = data.color;
               this.size = data.size || Options.BASESIZE;
@@ -6018,6 +5976,7 @@ var require_katex = __commonJS({
               this.sizeMultiplier = sizeMultipliers[this.size - 1];
               this.maxSize = data.maxSize;
               this.minRuleThickness = data.minRuleThickness;
+              this.strict = data.strict;
               this._fontMetrics = void 0;
             }
             /**
@@ -6036,7 +5995,8 @@ var require_katex = __commonJS({
                 fontWeight: this.fontWeight,
                 fontShape: this.fontShape,
                 maxSize: this.maxSize,
-                minRuleThickness: this.minRuleThickness
+                minRuleThickness: this.minRuleThickness,
+                strict: this.strict
               };
               Object.assign(data, extension);
               return new Options(data);
@@ -6175,7 +6135,7 @@ var require_katex = __commonJS({
              */
             sizingClasses(oldOptions) {
               if (oldOptions.size !== this.size) {
-                return ["sizing", "reset-size" + oldOptions.size, "size" + this.size];
+                return ["katex-sizing", "reset-size" + oldOptions.size, "size" + this.size];
               } else {
                 return [];
               }
@@ -6186,7 +6146,7 @@ var require_katex = __commonJS({
              */
             baseSizingClasses() {
               if (this.size !== Options.BASESIZE) {
-                return ["sizing", "reset-size" + this.size, "size" + Options.BASESIZE];
+                return ["katex-sizing", "reset-size" + this.size, "size" + Options.BASESIZE];
               } else {
                 return [];
               }
@@ -6214,13 +6174,12 @@ var require_katex = __commonJS({
           Options.BASESIZE = 6;
           var src_Options = Options;
           ;
-          const optionsFromSettings = function(settings) {
-            return new src_Options({
-              style: settings.displayMode ? src_Style.DISPLAY : src_Style.TEXT,
-              maxSize: settings.maxSize,
-              minRuleThickness: settings.minRuleThickness
-            });
-          };
+          const optionsFromSettings = (settings) => new src_Options({
+            style: settings.displayMode ? src_Style.DISPLAY : src_Style.TEXT,
+            maxSize: settings.maxSize,
+            minRuleThickness: settings.minRuleThickness,
+            strict: settings.strict
+          });
           const displayWrap = function(node, settings) {
             if (settings.displayMode) {
               const classes = ["katex-display"];
@@ -6249,7 +6208,7 @@ var require_katex = __commonJS({
             }
             return displayWrap(katexNode, settings);
           };
-          const buildHTMLTree = function(tree, expression, settings) {
+          const buildHTMLTree = function(tree, settings) {
             const options = optionsFromSettings(settings);
             const htmlNode = buildHTML(tree, options);
             const katexNode = makeSpan(["katex"], [htmlNode]);
@@ -6417,7 +6376,7 @@ var require_katex = __commonJS({
                 if (!data) {
                   throw new Error('No SVG data for "' + label + '".');
                 }
-                const [paths, minWidth2, viewBoxHeight] = data;
+                const paths = data[0], minWidth2 = data[1], viewBoxHeight = data[2];
                 const height2 = viewBoxHeight / 1e3;
                 const numSvgChildren = paths.length;
                 let widthClasses;
@@ -6458,17 +6417,13 @@ var require_katex = __commonJS({
                   }
                 }
                 return {
-                  span: makeSpan(["stretchy"], spans, options),
+                  span: makeSpan(["katex-stretchy"], spans, options),
                   minWidth: minWidth2,
                   height: height2
                 };
               }
             }
-            const {
-              span,
-              minWidth,
-              height
-            } = buildSvgSpan_();
+            const _buildSvgSpan_ = buildSvgSpan_(), span = _buildSvgSpan_.span, minWidth = _buildSvgSpan_.minWidth, height = _buildSvgSpan_.height;
             span.height = height;
             span.style.height = makeEm(height);
             if (minWidth > 0) {
@@ -6480,7 +6435,7 @@ var require_katex = __commonJS({
             let img;
             const totalHeight = inner2.height + inner2.depth + topPad + bottomPad;
             if (/fbox|color|angl/.test(label)) {
-              img = makeSpan(["stretchy", label], [], options);
+              img = makeSpan(["katex-stretchy", label], [], options);
               if (label === "fbox") {
                 const color = options.color && options.getColor();
                 if (color) {
@@ -6518,23 +6473,12 @@ var require_katex = __commonJS({
             return img;
           };
           ;
-          const ATOMS = {
-            "bin": 1,
-            "close": 1,
-            "inner": 1,
-            "open": 1,
-            "punct": 1,
-            "rel": 1
-          };
-          const NON_ATOMS = {
-            "accent-token": 1,
-            "mathord": 1,
-            "op-token": 1,
-            "spacing": 1,
-            "textord": 1
-          };
+          const atomList = ["bin", "close", "inner", "open", "punct", "rel"];
+          const nonAtomList = ["accent-token", "mathord", "op-token", "spacing", "textord"];
+          const Atoms = new Set(atomList);
+          const NonAtoms = new Set(nonAtomList);
           function isAtom(value) {
-            return value in ATOMS;
+            return Atoms.has(value);
           }
           ;
           function assertNodeType(node, type) {
@@ -6551,10 +6495,23 @@ var require_katex = __commonJS({
             return typedNode;
           }
           function checkSymbolNodeType(node) {
-            if (node && (node.type === "atom" || NON_ATOMS.hasOwnProperty(node.type))) {
+            if (node.type === "atom" || NonAtoms.has(node.type)) {
               return node;
             }
             return null;
+          }
+          function assertCharacterGroup(group, errorMessage, allowSpaces) {
+            let text2 = "";
+            for (const node of group.body) {
+              if (node.type === "textord") {
+                text2 += node.text;
+              } else if (allowSpaces && node.type === "spacing" && node.text === " ") {
+                text2 += " ";
+              } else {
+                throw new src_ParseError(errorMessage, group);
+              }
+            }
+            return text2;
           }
           ;
           const getBaseSymbol = (group) => {
@@ -6600,7 +6557,7 @@ var require_katex = __commonJS({
                   type: "textord",
                   mode: group.mode,
                   text: group.label
-                }, options, "textord");
+                }, options);
                 accent2 = assertSymbolDomNode(accent2);
                 accent2.italic = 0;
                 width = accent2.width;
@@ -6653,7 +6610,7 @@ var require_katex = __commonJS({
                 }]
               }, options);
             }
-            const accentWrap = makeSpan(["mord", "accent"], [accentBody], options);
+            const accentWrap = makeSpan(["mord", "katex-accent"], [accentBody], options);
             if (supSubGroup) {
               supSubGroup.children[0] = accentWrap;
               supSubGroup.height = Math.max(accentWrap.height, supSubGroup.height);
@@ -6673,9 +6630,7 @@ var require_katex = __commonJS({
           defineFunction({
             type: "accent",
             names: ["\\acute", "\\grave", "\\ddot", "\\tilde", "\\bar", "\\breve", "\\check", "\\hat", "\\vec", "\\dot", "\\mathring", "\\widecheck", "\\widehat", "\\widetilde", "\\overrightarrow", "\\overleftarrow", "\\Overrightarrow", "\\overleftrightarrow", "\\overgroup", "\\overlinesegment", "\\overleftharpoon", "\\overrightharpoon"],
-            props: {
-              numArgs: 1
-            },
+            numArgs: 1,
             handler: (context, args) => {
               const base = normalizeArgument(args[0]);
               const isStretchy = !NON_STRETCHY_ACCENT_REGEX.test(context.funcName);
@@ -6695,18 +6650,21 @@ var require_katex = __commonJS({
           defineFunction({
             type: "accent",
             names: ["\\'", "\\`", "\\^", "\\~", "\\=", "\\u", "\\.", '\\"', "\\c", "\\r", "\\H", "\\v", "\\textcircled"],
-            props: {
-              numArgs: 1,
-              allowedInText: true,
-              allowedInMath: true,
-              // unless in strict mode
-              argTypes: ["primitive"]
-            },
+            numArgs: 1,
+            allowedInText: true,
+            allowedInMath: true,
+            // unless in strict mode
+            argTypes: ["primitive"],
             handler: (context, args) => {
               const base = args[0];
               let mode = context.parser.mode;
               if (mode === "math") {
-                context.parser.settings.reportNonstrict("mathVsTextAccents", "LaTeX's accent " + context.funcName + " works only in text mode");
+                handleStrict({
+                  strict: context.parser.settings.strict,
+                  errorCode: "mathVsTextAccents",
+                  errorMsg: "LaTeX's accent " + context.funcName + " works only in text mode",
+                  report: true
+                });
                 mode = "text";
               }
               return {
@@ -6717,22 +6675,15 @@ var require_katex = __commonJS({
                 isShifty: true,
                 base
               };
-            },
-            htmlBuilder,
-            mathmlBuilder
+            }
           });
           ;
           defineFunction({
             type: "accentUnder",
             names: ["\\underleftarrow", "\\underrightarrow", "\\underleftrightarrow", "\\undergroup", "\\underlinesegment", "\\utilde"],
-            props: {
-              numArgs: 1
-            },
+            numArgs: 1,
             handler: (_ref, args) => {
-              let {
-                parser: parser2,
-                funcName
-              } = _ref;
+              let parser2 = _ref.parser, funcName = _ref.funcName;
               const base = args[0];
               return {
                 type: "accentUnder",
@@ -6808,15 +6759,10 @@ var require_katex = __commonJS({
               "\\\\cdleftarrow",
               "\\\\cdlongequal"
             ],
-            props: {
-              numArgs: 1,
-              numOptionalArgs: 1
-            },
+            numArgs: 1,
+            numOptionalArgs: 1,
             handler(_ref, args, optArgs) {
-              let {
-                parser: parser2,
-                funcName
-              } = _ref;
+              let parser2 = _ref.parser, funcName = _ref.funcName;
               return {
                 type: "xArrow",
                 mode: parser2.mode,
@@ -6935,9 +6881,6 @@ var require_katex = __commonJS({
               } else if (group.mclass === "mopen" || group.mclass === "mclose") {
                 node.attributes.lspace = "0em";
                 node.attributes.rspace = "0em";
-              } else if (group.mclass === "minner") {
-                node.attributes.lspace = "0.0556em";
-                node.attributes.width = "+0.1111em";
               }
             }
             return node;
@@ -6945,21 +6888,15 @@ var require_katex = __commonJS({
           defineFunction({
             type: "mclass",
             names: ["\\mathord", "\\mathbin", "\\mathrel", "\\mathopen", "\\mathclose", "\\mathpunct", "\\mathinner"],
-            props: {
-              numArgs: 1,
-              primitive: true
-            },
+            numArgs: 1,
+            primitive: true,
             handler(_ref, args) {
-              let {
-                parser: parser2,
-                funcName
-              } = _ref;
+              let parser2 = _ref.parser, funcName = _ref.funcName;
               const body = args[0];
               return {
                 type: "mclass",
                 mode: parser2.mode,
                 mclass: "m" + funcName.slice(5),
-                // TODO(kevinb): don't prefix with 'm'
                 body: ordargument(body),
                 isCharacterBox: isCharacterBox(body)
               };
@@ -6978,13 +6915,9 @@ var require_katex = __commonJS({
           defineFunction({
             type: "mclass",
             names: ["\\@binrel"],
-            props: {
-              numArgs: 2
-            },
+            numArgs: 2,
             handler(_ref2, args) {
-              let {
-                parser: parser2
-              } = _ref2;
+              let parser2 = _ref2.parser;
               return {
                 type: "mclass",
                 mode: parser2.mode,
@@ -6997,14 +6930,9 @@ var require_katex = __commonJS({
           defineFunction({
             type: "mclass",
             names: ["\\stackrel", "\\overset", "\\underset"],
-            props: {
-              numArgs: 2
-            },
+            numArgs: 2,
             handler(_ref3, args) {
-              let {
-                parser: parser2,
-                funcName
-              } = _ref3;
+              let parser2 = _ref3.parser, funcName = _ref3.funcName;
               const baseArg = args[1];
               const shiftedArg = args[0];
               let mclass;
@@ -7023,12 +6951,16 @@ var require_katex = __commonJS({
                 suppressBaseShift: funcName !== "\\stackrel",
                 body: ordargument(baseArg)
               };
-              const supsub = {
+              const supsub = funcName === "\\underset" ? {
                 type: "supsub",
                 mode: shiftedArg.mode,
                 base: baseOp,
-                sup: funcName === "\\underset" ? null : shiftedArg,
-                sub: funcName === "\\underset" ? shiftedArg : null
+                sub: shiftedArg
+              } : {
+                type: "supsub",
+                mode: shiftedArg.mode,
+                base: baseOp,
+                sup: shiftedArg
               };
               return {
                 type: "mclass",
@@ -7037,22 +6969,16 @@ var require_katex = __commonJS({
                 body: [supsub],
                 isCharacterBox: isCharacterBox(supsub)
               };
-            },
-            htmlBuilder: mclass_htmlBuilder,
-            mathmlBuilder: mclass_mathmlBuilder
+            }
           });
           ;
           defineFunction({
             type: "pmb",
             names: ["\\pmb"],
-            props: {
-              numArgs: 1,
-              allowedInText: true
-            },
+            numArgs: 1,
+            allowedInText: true,
             handler(_ref, args) {
-              let {
-                parser: parser2
-              } = _ref;
+              let parser2 = _ref.parser;
               return {
                 type: "pmb",
                 mode: parser2.mode,
@@ -7252,14 +7178,9 @@ var require_katex = __commonJS({
           defineFunction({
             type: "cdlabel",
             names: ["\\\\cdleft", "\\\\cdright"],
-            props: {
-              numArgs: 1
-            },
+            numArgs: 1,
             handler(_ref, args) {
-              let {
-                parser: parser2,
-                funcName
-              } = _ref;
+              let parser2 = _ref.parser, funcName = _ref.funcName;
               return {
                 type: "cdlabel",
                 mode: parser2.mode,
@@ -7293,13 +7214,9 @@ var require_katex = __commonJS({
           defineFunction({
             type: "cdlabelparent",
             names: ["\\\\cdparent"],
-            props: {
-              numArgs: 1
-            },
+            numArgs: 1,
             handler(_ref2, args) {
-              let {
-                parser: parser2
-              } = _ref2;
+              let parser2 = _ref2.parser;
               return {
                 type: "cdlabelparent",
                 mode: parser2.mode,
@@ -7319,26 +7236,17 @@ var require_katex = __commonJS({
           defineFunction({
             type: "textord",
             names: ["\\@char"],
-            props: {
-              numArgs: 1,
-              allowedInText: true
-            },
+            numArgs: 1,
+            allowedInText: true,
             handler(_ref, args) {
-              let {
-                parser: parser2
-              } = _ref;
+              let parser2 = _ref.parser;
               const arg = assertNodeType(args[0], "ordgroup");
-              const group = arg.body;
-              let number = "";
-              for (let i = 0; i < group.length; i++) {
-                const node = assertNodeType(group[i], "textord");
-                number += node.text;
-              }
+              const number = assertCharacterGroup(arg, "\\@char has non-numeric argument");
               let code2 = parseInt(number);
               let text2;
               if (isNaN(code2)) {
                 throw new src_ParseError("\\@char has non-numeric argument " + number);
-              } else if (code2 < 0 || code2 >= 1114111) {
+              } else if (code2 < 0 || code2 > 1114111) {
                 throw new src_ParseError("\\@char with invalid code point " + number);
               } else if (code2 <= 65535) {
                 text2 = String.fromCharCode(code2);
@@ -7367,15 +7275,11 @@ var require_katex = __commonJS({
           defineFunction({
             type: "color",
             names: ["\\textcolor"],
-            props: {
-              numArgs: 2,
-              allowedInText: true,
-              argTypes: ["color", "original"]
-            },
+            numArgs: 2,
+            allowedInText: true,
+            argTypes: ["color", "original"],
             handler(_ref, args) {
-              let {
-                parser: parser2
-              } = _ref;
+              let parser2 = _ref.parser;
               const color = assertNodeType(args[0], "color-token").color;
               const body = args[1];
               return {
@@ -7391,16 +7295,11 @@ var require_katex = __commonJS({
           defineFunction({
             type: "color",
             names: ["\\color"],
-            props: {
-              numArgs: 1,
-              allowedInText: true,
-              argTypes: ["color"]
-            },
+            numArgs: 1,
+            allowedInText: true,
+            argTypes: ["color"],
             handler(_ref2, args) {
-              let {
-                parser: parser2,
-                breakOnTokenText
-              } = _ref2;
+              let parser2 = _ref2.parser, breakOnTokenText = _ref2.breakOnTokenText;
               const color = assertNodeType(args[0], "color-token").color;
               parser2.gullet.macros.set("\\current@color", color);
               const body = parser2.parseExpression(true, breakOnTokenText);
@@ -7410,25 +7309,24 @@ var require_katex = __commonJS({
                 color,
                 body
               };
-            },
-            htmlBuilder: color_htmlBuilder,
-            mathmlBuilder: color_mathmlBuilder
+            }
           });
           ;
           defineFunction({
             type: "cr",
             names: ["\\\\"],
-            props: {
-              numArgs: 0,
-              numOptionalArgs: 0,
-              allowedInText: true
-            },
-            handler(_ref, args, optArgs) {
-              let {
-                parser: parser2
-              } = _ref;
+            numArgs: 0,
+            numOptionalArgs: 0,
+            allowedInText: true,
+            handler(_ref) {
+              let parser2 = _ref.parser;
               const size = parser2.gullet.future().text === "[" ? parser2.parseSizeGroup(true) : null;
-              const newLine = !parser2.settings.displayMode || !parser2.settings.useStrictBehavior("newLineInDisplayMode", "In LaTeX, \\\\ or \\newline does nothing in display mode");
+              const newLine = !parser2.settings.displayMode || !handleStrict({
+                strict: parser2.settings.strict,
+                errorCode: "newLineInDisplayMode",
+                errorMsg: "In LaTeX, \\\\ or \\newline does nothing in display mode",
+                report: false
+              });
               return {
                 type: "cr",
                 mode: parser2.mode,
@@ -7441,7 +7339,7 @@ var require_katex = __commonJS({
             htmlBuilder(group, options) {
               const span = makeSpan(["mspace"], [], options);
               if (group.newLine) {
-                span.classes.push("newline");
+                span.classes.push("katex-newline");
                 if (group.size) {
                   span.style.marginTop = makeEm(calculateSize(group.size, options));
                 }
@@ -7509,15 +7407,10 @@ var require_katex = __commonJS({
               "\\\\globallong"
               // can’t be entered directly
             ],
-            props: {
-              numArgs: 0,
-              allowedInText: true
-            },
+            numArgs: 0,
+            allowedInText: true,
             handler(_ref) {
-              let {
-                parser: parser2,
-                funcName
-              } = _ref;
+              let parser2 = _ref.parser, funcName = _ref.funcName;
               parser2.consumeSpaces();
               const token = parser2.fetch();
               if (globalMap[token.text]) {
@@ -7532,16 +7425,11 @@ var require_katex = __commonJS({
           defineFunction({
             type: "internal",
             names: ["\\def", "\\gdef", "\\edef", "\\xdef"],
-            props: {
-              numArgs: 0,
-              allowedInText: true,
-              primitive: true
-            },
+            numArgs: 0,
+            allowedInText: true,
+            primitive: true,
             handler(_ref2) {
-              let {
-                parser: parser2,
-                funcName
-              } = _ref2;
+              let parser2 = _ref2.parser, funcName = _ref2.funcName;
               let tok = parser2.gullet.popToken();
               const name = tok.text;
               if (/^(?:[\\{}$&#^_]|EOF)$/.test(name)) {
@@ -7573,9 +7461,7 @@ var require_katex = __commonJS({
                   delimiters2[numArgs].push(tok.text);
                 }
               }
-              let {
-                tokens
-              } = parser2.gullet.consumeArg();
+              let _parser$gullet$consum = parser2.gullet.consumeArg(), tokens = _parser$gullet$consum.tokens;
               if (insert) {
                 tokens.unshift(insert);
               }
@@ -7601,16 +7487,11 @@ var require_katex = __commonJS({
               "\\\\globallet"
               // can’t be entered directly
             ],
-            props: {
-              numArgs: 0,
-              allowedInText: true,
-              primitive: true
-            },
+            numArgs: 0,
+            allowedInText: true,
+            primitive: true,
             handler(_ref3) {
-              let {
-                parser: parser2,
-                funcName
-              } = _ref3;
+              let parser2 = _ref3.parser, funcName = _ref3.funcName;
               const name = checkControlSequence(parser2.gullet.popToken());
               parser2.gullet.consumeSpaces();
               const tok = getRHS(parser2);
@@ -7628,16 +7509,11 @@ var require_katex = __commonJS({
               "\\\\globalfuture"
               // can’t be entered directly
             ],
-            props: {
-              numArgs: 0,
-              allowedInText: true,
-              primitive: true
-            },
+            numArgs: 0,
+            allowedInText: true,
+            primitive: true,
             handler(_ref4) {
-              let {
-                parser: parser2,
-                funcName
-              } = _ref4;
+              let parser2 = _ref4.parser, funcName = _ref4.funcName;
               const name = checkControlSequence(parser2.gullet.popToken());
               const middle = parser2.gullet.popToken();
               const tok = parser2.gullet.popToken();
@@ -7695,14 +7571,14 @@ var require_katex = __commonJS({
             }
             return span;
           };
-          const makeGlyphSpan = function(symbol, font, mode) {
+          const makeGlyphSpan = function(symbol, font, mode, options) {
             let sizeClass;
             if (font === "Size1-Regular") {
               sizeClass = "delim-size1";
             } else {
               sizeClass = "delim-size4";
             }
-            const corner = makeSpan(["delimsizinginner", sizeClass], [makeSpan([], [makeSymbol(symbol, font, mode)])]);
+            const corner = makeSpan(["delimsizinginner", sizeClass], [makeSpan([], [makeSymbol(symbol, font, mode, options)])]);
             return {
               type: "elem",
               elem: corner
@@ -7897,7 +7773,7 @@ var require_katex = __commonJS({
                 elem: wrapper
               });
             } else {
-              stack.push(makeGlyphSpan(bottom, font, mode));
+              stack.push(makeGlyphSpan(bottom, font, mode, options));
               stack.push(lap);
               if (middle === null) {
                 const innerHeight = realHeightTotal - topHeightTotal - bottomHeightTotal + 2 * lapInEms;
@@ -7906,12 +7782,12 @@ var require_katex = __commonJS({
                 const innerHeight = (realHeightTotal - topHeightTotal - bottomHeightTotal - middleHeightTotal) / 2 + 2 * lapInEms;
                 stack.push(makeInner(repeat, innerHeight, options));
                 stack.push(lap);
-                stack.push(makeGlyphSpan(middle, font, mode));
+                stack.push(makeGlyphSpan(middle, font, mode, options));
                 stack.push(lap);
                 stack.push(makeInner(repeat, innerHeight, options));
               }
               stack.push(lap);
-              stack.push(makeGlyphSpan(top, font, mode));
+              stack.push(makeGlyphSpan(top, font, mode, options));
             }
             const newOptions = options.havingBaseStyle(src_Style.TEXT);
             const inner2 = makeVList({
@@ -8218,12 +8094,10 @@ var require_katex = __commonJS({
           defineFunction({
             type: "delimsizing",
             names: ["\\bigl", "\\Bigl", "\\biggl", "\\Biggl", "\\bigr", "\\Bigr", "\\biggr", "\\Biggr", "\\bigm", "\\Bigm", "\\biggm", "\\Biggm", "\\big", "\\Big", "\\bigg", "\\Bigg"],
-            props: {
-              numArgs: 1,
-              argTypes: ["primitive"]
-            },
+            numArgs: 1,
+            argTypes: ["primitive"],
             handler: (context, args) => {
-              const delim = checkDelimiter(args[0], context);
+              const delim = checkDelimiter(normalizeArgument(args[0]), context);
               return {
                 type: "delimsizing",
                 mode: context.parser.mode,
@@ -8264,10 +8138,8 @@ var require_katex = __commonJS({
           defineFunction({
             type: "leftright-right",
             names: ["\\right"],
-            props: {
-              numArgs: 1,
-              primitive: true
-            },
+            numArgs: 1,
+            primitive: true,
             handler: (context, args) => {
               const color = context.parser.gullet.macros.get("\\current@color");
               if (color && typeof color !== "string") {
@@ -8285,10 +8157,8 @@ var require_katex = __commonJS({
           defineFunction({
             type: "leftright",
             names: ["\\left"],
-            props: {
-              numArgs: 1,
-              primitive: true
-            },
+            numArgs: 1,
+            primitive: true,
             handler: (context, args) => {
               const delim = checkDelimiter(args[0], context);
               const parser2 = context.parser;
@@ -8371,10 +8241,8 @@ var require_katex = __commonJS({
           defineFunction({
             type: "middle",
             names: ["\\middle"],
-            props: {
-              numArgs: 1,
-              primitive: true
-            },
+            numArgs: 1,
+            primitive: true,
             handler: (context, args) => {
               const delim = checkDelimiter(args[0], context);
               if (!context.parser.leftrightDepth) {
@@ -8417,7 +8285,7 @@ var require_katex = __commonJS({
             let imgShift;
             const isSingleChar = isCharacterBox(group.body);
             if (label === "sout") {
-              img = makeSpan(["stretchy", "sout"]);
+              img = makeSpan(["katex-stretchy", "katex-sout"]);
               img.height = options.fontMetrics().defaultRuleThickness / scale;
               imgShift = -0.5 * options.fontMetrics().xHeight;
             } else if (label === "phase") {
@@ -8589,16 +8457,11 @@ var require_katex = __commonJS({
           defineFunction({
             type: "enclose",
             names: ["\\colorbox"],
-            props: {
-              numArgs: 2,
-              allowedInText: true,
-              argTypes: ["color", "hbox"]
-            },
+            numArgs: 2,
+            allowedInText: true,
+            argTypes: ["color", "hbox"],
             handler(_ref, args, optArgs) {
-              let {
-                parser: parser2,
-                funcName
-              } = _ref;
+              let parser2 = _ref.parser, funcName = _ref.funcName;
               const color = assertNodeType(args[0], "color-token").color;
               const body = args[1];
               return {
@@ -8615,16 +8478,11 @@ var require_katex = __commonJS({
           defineFunction({
             type: "enclose",
             names: ["\\fcolorbox"],
-            props: {
-              numArgs: 3,
-              allowedInText: true,
-              argTypes: ["color", "color", "hbox"]
-            },
+            numArgs: 3,
+            allowedInText: true,
+            argTypes: ["color", "color", "hbox"],
             handler(_ref2, args, optArgs) {
-              let {
-                parser: parser2,
-                funcName
-              } = _ref2;
+              let parser2 = _ref2.parser, funcName = _ref2.funcName;
               const borderColor = assertNodeType(args[0], "color-token").color;
               const backgroundColor = assertNodeType(args[1], "color-token").color;
               const body = args[2];
@@ -8636,22 +8494,16 @@ var require_katex = __commonJS({
                 borderColor,
                 body
               };
-            },
-            htmlBuilder: enclose_htmlBuilder,
-            mathmlBuilder: enclose_mathmlBuilder
+            }
           });
           defineFunction({
             type: "enclose",
             names: ["\\fbox"],
-            props: {
-              numArgs: 1,
-              argTypes: ["hbox"],
-              allowedInText: true
-            },
+            numArgs: 1,
+            argTypes: ["hbox"],
+            allowedInText: true,
             handler(_ref3, args) {
-              let {
-                parser: parser2
-              } = _ref3;
+              let parser2 = _ref3.parser;
               return {
                 type: "enclose",
                 mode: parser2.mode,
@@ -8663,14 +8515,9 @@ var require_katex = __commonJS({
           defineFunction({
             type: "enclose",
             names: ["\\cancel", "\\bcancel", "\\xcancel", "\\phase"],
-            props: {
-              numArgs: 1
-            },
+            numArgs: 1,
             handler(_ref4, args) {
-              let {
-                parser: parser2,
-                funcName
-              } = _ref4;
+              let parser2 = _ref4.parser, funcName = _ref4.funcName;
               const body = args[0];
               return {
                 type: "enclose",
@@ -8678,24 +8525,22 @@ var require_katex = __commonJS({
                 label: funcName,
                 body
               };
-            },
-            htmlBuilder: enclose_htmlBuilder,
-            mathmlBuilder: enclose_mathmlBuilder
+            }
           });
           defineFunction({
             type: "enclose",
             names: ["\\sout"],
-            props: {
-              numArgs: 1,
-              allowedInText: true
-            },
+            numArgs: 1,
+            allowedInText: true,
             handler(_ref5, args) {
-              let {
-                parser: parser2,
-                funcName
-              } = _ref5;
+              let parser2 = _ref5.parser, funcName = _ref5.funcName;
               if (parser2.mode === "math") {
-                parser2.settings.reportNonstrict("mathVsSout", "LaTeX's \\sout works only in text mode");
+                handleStrict({
+                  strict: parser2.settings.strict,
+                  errorCode: "mathVsSout",
+                  errorMsg: "LaTeX's \\sout works only in text mode",
+                  report: true
+                });
               }
               const body = args[0];
               return {
@@ -8704,22 +8549,16 @@ var require_katex = __commonJS({
                 label: funcName,
                 body
               };
-            },
-            htmlBuilder: enclose_htmlBuilder,
-            mathmlBuilder: enclose_mathmlBuilder
+            }
           });
           defineFunction({
             type: "enclose",
             names: ["\\angl"],
-            props: {
-              numArgs: 1,
-              argTypes: ["hbox"],
-              allowedInText: false
-            },
+            numArgs: 1,
+            argTypes: ["hbox"],
+            allowedInText: false,
             handler(_ref6, args) {
-              let {
-                parser: parser2
-              } = _ref6;
+              let parser2 = _ref6.parser;
               return {
                 type: "enclose",
                 mode: parser2.mode,
@@ -8731,20 +8570,13 @@ var require_katex = __commonJS({
           ;
           const _environments = {};
           function defineEnvironment(_ref) {
-            let {
-              type,
-              names,
-              props,
-              handler,
-              htmlBuilder: htmlBuilder2,
-              mathmlBuilder: mathmlBuilder2
-            } = _ref;
+            let type = _ref.type, names = _ref.names, props = _ref.props, handler2 = _ref.handler, htmlBuilder2 = _ref.htmlBuilder, mathmlBuilder2 = _ref.mathmlBuilder;
             const data = {
               type,
               numArgs: props.numArgs || 0,
               allowedInText: false,
               numOptionalArgs: 0,
-              handler
+              handler: handler2
             };
             for (let i = 0; i < names.length; ++i) {
               _environments[names[i]] = data;
@@ -8840,18 +8672,7 @@ var require_katex = __commonJS({
             }
           }
           function parseArray(parser2, _ref, style) {
-            let {
-              hskipBeforeAndAfter,
-              addJot,
-              cols,
-              arraystretch,
-              colSeparationType,
-              autoTag,
-              singleRow,
-              emptySingleRow,
-              maxNumCols,
-              leqno
-            } = _ref;
+            let hskipBeforeAndAfter = _ref.hskipBeforeAndAfter, addJot = _ref.addJot, cols = _ref.cols, arraystretch = _ref.arraystretch, colSeparationType = _ref.colSeparationType, autoTag = _ref.autoTag, singleRow = _ref.singleRow, emptySingleRow = _ref.emptySingleRow, maxNumCols = _ref.maxNumCols, leqno = _ref.leqno;
             parser2.gullet.beginGroup();
             if (!singleRow) {
               parser2.gullet.macros.set("\\cr", "\\\\\\relax");
@@ -8915,13 +8736,18 @@ var require_katex = __commonJS({
                   if (singleRow || colSeparationType) {
                     throw new src_ParseError("Too many tab characters: &", parser2.nextToken);
                   } else {
-                    parser2.settings.reportNonstrict("textEnv", "Too few columns specified in the {array} column argument.");
+                    handleStrict({
+                      strict: parser2.settings.strict,
+                      errorCode: "textEnv",
+                      errorMsg: "Too few columns specified in the {array} column argument.",
+                      report: true
+                    });
                   }
                 }
                 parser2.consume();
               } else if (next === "\\end") {
                 endRow();
-                if (row.length === 1 && cell.type === "styling" && cell.body.length === 1 && cell.body[0].type === "ordgroup" && cell.body[0].body.length === 0 && (body.length > 1 || !emptySingleRow)) {
+                if (row.length === 1 && cell.type === "styling" && cell.body.length === 1 && cell.body[0].type === "ordgroup" && cell.body[0].body.length === 0 && (body.length > 1 || !emptySingleRow) && !Array.isArray(tags == null ? void 0 : tags[tags.length - 1]) && !(autoTag && (tags == null ? void 0 : tags[tags.length - 1]) === true)) {
                   body.pop();
                 }
                 if (hLinesBeforeRow.length < body.length + 1) {
@@ -9166,8 +8992,8 @@ var require_katex = __commonJS({
             }
             let tableBody = makeSpan(["mtable"], cols);
             if (hlines.length > 0) {
-              const line = makeLineSpan("hline", options, ruleThickness);
-              const dashes = makeLineSpan("hdashline", options, ruleThickness);
+              const line = makeLineSpan("katex-hline", options, ruleThickness);
+              const dashes = makeLineSpan("katex-hdashline", options, ruleThickness);
               const vListElems = [{
                 type: "elem",
                 elem: tableBody,
@@ -9202,7 +9028,7 @@ var require_katex = __commonJS({
                 positionType: "individualShift",
                 children: tagSpans
               }, options);
-              const tagCol = makeSpan(["tag"], [eqnNumCol], options);
+              const tagCol = makeSpan(["katex-tag"], [eqnNumCol], options);
               return makeFragment([tableBody, tagCol]);
             }
           };
@@ -9312,14 +9138,13 @@ var require_katex = __commonJS({
               validateAmsEnvironmentContext(context);
             }
             const cols = [];
-            const separationType = context.envName.includes("at") ? "alignat" : "align";
             const isSplit = context.envName === "split";
             const res = parseArray(context.parser, {
               cols,
               addJot: true,
               autoTag: isSplit ? void 0 : getAutoTag(context.envName),
               emptySingleRow: true,
-              colSeparationType: separationType,
+              colSeparationType: context.envName.includes("at") ? "alignat" : "align",
               maxNumCols: isSplit ? 2 : void 0,
               leqno: context.parser.settings.leqno
             }, "display");
@@ -9331,12 +9156,12 @@ var require_katex = __commonJS({
               body: []
             };
             if (args[0] && args[0].type === "ordgroup") {
-              let arg0 = "";
-              for (let i = 0; i < args[0].body.length; i++) {
-                const textord2 = assertNodeType(args[0].body[i], "textord");
-                arg0 += textord2.text;
+              const message = "Number of columns should be a positive integer";
+              const numColumns = assertCharacterGroup(args[0], message);
+              if (!/^[0-9]+$/.test(numColumns) || Number(numColumns) < 1) {
+                throw new src_ParseError(message, args[0]);
               }
-              numMaths = Number(arg0);
+              numMaths = Number(numColumns);
               numCols = numMaths * 2;
             }
             const isAligned = !numCols;
@@ -9654,11 +9479,9 @@ var require_katex = __commonJS({
             type: "text",
             // Doesn't matter what this is.
             names: ["\\hline", "\\hdashline"],
-            props: {
-              numArgs: 0,
-              allowedInText: true,
-              allowedInMath: true
-            },
+            numArgs: 0,
+            allowedInText: true,
+            allowedInMath: true,
             handler(context, args) {
               throw new src_ParseError(context.funcName + " valid only within array environment");
             }
@@ -9670,32 +9493,21 @@ var require_katex = __commonJS({
           defineFunction({
             type: "environment",
             names: ["\\begin", "\\end"],
-            props: {
-              numArgs: 1,
-              argTypes: ["text"]
-            },
+            numArgs: 1,
+            argTypes: ["text"],
             handler(_ref, args) {
-              let {
-                parser: parser2,
-                funcName
-              } = _ref;
+              let parser2 = _ref.parser, funcName = _ref.funcName;
               const nameGroup = args[0];
               if (nameGroup.type !== "ordgroup") {
                 throw new src_ParseError("Invalid environment name", nameGroup);
               }
-              let envName = "";
-              for (let i = 0; i < nameGroup.body.length; ++i) {
-                envName += assertNodeType(nameGroup.body[i], "textord").text;
-              }
+              const envName = assertCharacterGroup(nameGroup, "Environment name should contain only text characters and spaces", true);
               if (funcName === "\\begin") {
-                if (!src_environments.hasOwnProperty(envName)) {
+                if (!Object.prototype.hasOwnProperty.call(src_environments, envName)) {
                   throw new src_ParseError("No such environment: " + envName, nameGroup);
                 }
                 const env = src_environments[envName];
-                const {
-                  args: args2,
-                  optArgs
-                } = parser2.parseArguments("\\begin{" + envName + "}", env);
+                const _parser$parseArgument = parser2.parseArguments("\\begin{" + envName + "}", env), args2 = _parser$parseArgument.args, optArgs = _parser$parseArgument.optArgs;
                 const context = {
                   mode: parser2.mode,
                   envName,
@@ -9755,20 +9567,12 @@ var require_katex = __commonJS({
               "\\bold",
               "\\frak"
             ],
-            props: {
-              numArgs: 1,
-              allowedInArgument: true
-            },
+            numArgs: 1,
+            allowedInArgument: true,
             handler: (_ref, args) => {
-              let {
-                parser: parser2,
-                funcName
-              } = _ref;
+              let parser2 = _ref.parser, funcName = _ref.funcName;
               const body = normalizeArgument(args[0]);
-              let func = funcName;
-              if (func in fontAliases) {
-                func = fontAliases[func];
-              }
+              const func = funcName in fontAliases ? fontAliases[funcName] : funcName;
               return {
                 type: "font",
                 mode: parser2.mode,
@@ -9782,13 +9586,9 @@ var require_katex = __commonJS({
           defineFunction({
             type: "mclass",
             names: ["\\boldsymbol", "\\bm"],
-            props: {
-              numArgs: 1
-            },
+            numArgs: 1,
             handler: (_ref2, args) => {
-              let {
-                parser: parser2
-              } = _ref2;
+              let parser2 = _ref2.parser;
               const body = args[0];
               return {
                 type: "mclass",
@@ -9807,19 +9607,11 @@ var require_katex = __commonJS({
           defineFunction({
             type: "font",
             names: ["\\rm", "\\sf", "\\tt", "\\bf", "\\it", "\\cal"],
-            props: {
-              numArgs: 0,
-              allowedInText: true
-            },
+            numArgs: 0,
+            allowedInText: true,
             handler: (_ref3, args) => {
-              let {
-                parser: parser2,
-                funcName,
-                breakOnTokenText
-              } = _ref3;
-              const {
-                mode
-              } = parser2;
+              let parser2 = _ref3.parser, funcName = _ref3.funcName, breakOnTokenText = _ref3.breakOnTokenText;
+              const mode = parser2.mode;
               const body = parser2.parseExpression(true, breakOnTokenText);
               return {
                 type: "font",
@@ -9831,9 +9623,7 @@ var require_katex = __commonJS({
                   body
                 }
               };
-            },
-            htmlBuilder: font_htmlBuilder,
-            mathmlBuilder: font_mathmlBuilder
+            }
           });
           ;
           const genfrac_htmlBuilder = (group, options) => {
@@ -10014,15 +9804,10 @@ var require_katex = __commonJS({
               "\\\\brackfrac"
               // ditto
             ],
-            props: {
-              numArgs: 2,
-              allowedInArgument: true
-            },
+            numArgs: 2,
+            allowedInArgument: true,
             handler: (_ref, args) => {
-              let {
-                parser: parser2,
-                funcName
-              } = _ref;
+              let parser2 = _ref.parser, funcName = _ref.funcName;
               const numer = args[0];
               const denom = args[1];
               let hasBarLine;
@@ -10083,16 +9868,10 @@ var require_katex = __commonJS({
           defineFunction({
             type: "infix",
             names: ["\\over", "\\choose", "\\atop", "\\brace", "\\brack"],
-            props: {
-              numArgs: 0,
-              infix: true
-            },
+            numArgs: 0,
+            infix: true,
             handler(_ref2) {
-              let {
-                parser: parser2,
-                funcName,
-                token
-              } = _ref2;
+              let parser2 = _ref2.parser, funcName = _ref2.funcName, token = _ref2.token;
               let replaceWith;
               switch (funcName) {
                 case "\\over":
@@ -10133,15 +9912,11 @@ var require_katex = __commonJS({
           defineFunction({
             type: "genfrac",
             names: ["\\genfrac"],
-            props: {
-              numArgs: 6,
-              allowedInArgument: true,
-              argTypes: ["math", "math", "size", "text", "math", "math"]
-            },
+            numArgs: 6,
+            allowedInArgument: true,
+            argTypes: ["math", "math", "size", "text", "math", "math"],
             handler(_ref3, args) {
-              let {
-                parser: parser2
-              } = _ref3;
+              let parser2 = _ref3.parser;
               const numer = args[4];
               const denom = args[5];
               const leftNode = normalizeArgument(args[0]);
@@ -10184,17 +9959,11 @@ var require_katex = __commonJS({
           defineFunction({
             type: "infix",
             names: ["\\above"],
-            props: {
-              numArgs: 1,
-              argTypes: ["size"],
-              infix: true
-            },
+            numArgs: 1,
+            argTypes: ["size"],
+            infix: true,
             handler(_ref4, args) {
-              let {
-                parser: parser2,
-                funcName,
-                token
-              } = _ref4;
+              let parser2 = _ref4.parser, funcName = _ref4.funcName, token = _ref4.token;
               return {
                 type: "infix",
                 mode: parser2.mode,
@@ -10207,15 +9976,10 @@ var require_katex = __commonJS({
           defineFunction({
             type: "genfrac",
             names: ["\\\\abovefrac"],
-            props: {
-              numArgs: 3,
-              argTypes: ["math", "size", "math"]
-            },
+            numArgs: 3,
+            argTypes: ["math", "size", "math"],
             handler: (_ref5, args) => {
-              let {
-                parser: parser2,
-                funcName
-              } = _ref5;
+              let parser2 = _ref5.parser, funcName = _ref5.funcName;
               const numer = args[0];
               const barSize = assertNodeType(args[1], "infix").size;
               if (!barSize) {
@@ -10324,14 +10088,9 @@ var require_katex = __commonJS({
           defineFunction({
             type: "horizBrace",
             names: ["\\overbrace", "\\underbrace", "\\overbracket", "\\underbracket"],
-            props: {
-              numArgs: 1
-            },
+            numArgs: 1,
             handler(_ref, args) {
-              let {
-                parser: parser2,
-                funcName
-              } = _ref;
+              let parser2 = _ref.parser, funcName = _ref.funcName;
               return {
                 type: "horizBrace",
                 mode: parser2.mode,
@@ -10347,15 +10106,11 @@ var require_katex = __commonJS({
           defineFunction({
             type: "href",
             names: ["\\href"],
-            props: {
-              numArgs: 2,
-              argTypes: ["url", "original"],
-              allowedInText: true
-            },
+            numArgs: 2,
+            argTypes: ["url", "original"],
+            allowedInText: true,
             handler: (_ref, args) => {
-              let {
-                parser: parser2
-              } = _ref;
+              let parser2 = _ref.parser;
               const body = args[1];
               const href = assertNodeType(args[0], "url").url;
               if (!parser2.settings.isTrusted({
@@ -10387,15 +10142,11 @@ var require_katex = __commonJS({
           defineFunction({
             type: "href",
             names: ["\\url"],
-            props: {
-              numArgs: 1,
-              argTypes: ["url"],
-              allowedInText: true
-            },
+            numArgs: 1,
+            argTypes: ["url"],
+            allowedInText: true,
             handler: (_ref2, args) => {
-              let {
-                parser: parser2
-              } = _ref2;
+              let parser2 = _ref2.parser;
               const href = assertNodeType(args[0], "url").url;
               if (!parser2.settings.isTrusted({
                 command: "\\url",
@@ -10433,16 +10184,12 @@ var require_katex = __commonJS({
           defineFunction({
             type: "hbox",
             names: ["\\hbox"],
-            props: {
-              numArgs: 1,
-              argTypes: ["text"],
-              allowedInText: true,
-              primitive: true
-            },
+            numArgs: 1,
+            argTypes: ["text"],
+            allowedInText: true,
+            primitive: true,
             handler(_ref, args) {
-              let {
-                parser: parser2
-              } = _ref;
+              let parser2 = _ref.parser;
               return {
                 type: "hbox",
                 mode: parser2.mode,
@@ -10461,21 +10208,20 @@ var require_katex = __commonJS({
           defineFunction({
             type: "html",
             names: ["\\htmlClass", "\\htmlId", "\\htmlStyle", "\\htmlData"],
-            props: {
-              numArgs: 2,
-              argTypes: ["raw", "original"],
-              allowedInText: true
-            },
+            numArgs: 2,
+            argTypes: ["raw", "original"],
+            allowedInText: true,
             handler: (_ref, args) => {
-              let {
-                parser: parser2,
-                funcName,
-                token
-              } = _ref;
+              let parser2 = _ref.parser, funcName = _ref.funcName, token = _ref.token;
               const value = assertNodeType(args[0], "raw").string;
               const body = args[1];
               if (parser2.settings.strict) {
-                parser2.settings.reportNonstrict("htmlExtension", "HTML extension is disabled on strict mode");
+                handleStrict({
+                  strict: parser2.settings.strict,
+                  errorCode: "htmlExtension",
+                  errorMsg: "HTML extension is disabled on strict mode",
+                  report: true
+                });
               }
               let trustContext;
               const attributes = {};
@@ -10502,7 +10248,21 @@ var require_katex = __commonJS({
                   };
                   break;
                 case "\\htmlData": {
-                  const data = value.split(",");
+                  const ESCAPED_COMMA = "{,}";
+                  const data = [];
+                  let current = "";
+                  for (let i = 0; i < value.length; i++) {
+                    if (value.startsWith(ESCAPED_COMMA, i)) {
+                      current += ",";
+                      i += ESCAPED_COMMA.length - 1;
+                    } else if (value[i] === ",") {
+                      data.push(current);
+                      current = "";
+                    } else {
+                      current += value[i];
+                    }
+                  }
+                  data.push(current);
                   for (let i = 0; i < data.length; i++) {
                     const item = data[i];
                     const firstEquals = item.indexOf("=");
@@ -10539,9 +10299,11 @@ var require_katex = __commonJS({
                 classes.push(...group.attributes.class.trim().split(/\s+/));
               }
               const span = makeSpan(classes, elements, options);
-              for (const attr in group.attributes) {
-                if (attr !== "class" && group.attributes.hasOwnProperty(attr)) {
-                  span.setAttribute(attr, group.attributes[attr]);
+              for (const _ref2 of Object.entries(group.attributes)) {
+                const attr = _ref2[0];
+                const value = _ref2[1];
+                if (attr !== "class") {
+                  span.setAttribute(attr, value);
                 }
               }
               return span;
@@ -10554,15 +10316,11 @@ var require_katex = __commonJS({
           defineFunction({
             type: "htmlmathml",
             names: ["\\html@mathml"],
-            props: {
-              numArgs: 2,
-              allowedInArgument: true,
-              allowedInText: true
-            },
+            numArgs: 2,
+            allowedInArgument: true,
+            allowedInText: true,
             handler: (_ref, args) => {
-              let {
-                parser: parser2
-              } = _ref;
+              let parser2 = _ref.parser;
               return {
                 type: "htmlmathml",
                 mode: parser2.mode,
@@ -10604,16 +10362,12 @@ var require_katex = __commonJS({
           defineFunction({
             type: "includegraphics",
             names: ["\\includegraphics"],
-            props: {
-              numArgs: 1,
-              numOptionalArgs: 1,
-              argTypes: ["raw", "url"],
-              allowedInText: false
-            },
+            numArgs: 1,
+            numOptionalArgs: 1,
+            argTypes: ["raw", "url"],
+            allowedInText: false,
             handler: (_ref, args, optArgs) => {
-              let {
-                parser: parser2
-              } = _ref;
+              let parser2 = _ref.parser;
               let width = {
                 number: 0,
                 unit: "em"
@@ -10721,31 +10475,41 @@ var require_katex = __commonJS({
           defineFunction({
             type: "kern",
             names: ["\\kern", "\\mkern", "\\hskip", "\\mskip"],
-            props: {
-              numArgs: 1,
-              argTypes: ["size"],
-              primitive: true,
-              allowedInText: true
-            },
+            numArgs: 1,
+            argTypes: ["size"],
+            primitive: true,
+            allowedInText: true,
             handler(_ref, args) {
-              let {
-                parser: parser2,
-                funcName
-              } = _ref;
+              let parser2 = _ref.parser, funcName = _ref.funcName;
               const size = assertNodeType(args[0], "size");
               if (parser2.settings.strict) {
                 const mathFunction = funcName[1] === "m";
                 const muUnit = size.value.unit === "mu";
                 if (mathFunction) {
                   if (!muUnit) {
-                    parser2.settings.reportNonstrict("mathVsTextUnits", "LaTeX's " + funcName + " supports only mu units, " + ("not " + size.value.unit + " units"));
+                    handleStrict({
+                      strict: parser2.settings.strict,
+                      errorCode: "mathVsTextUnits",
+                      errorMsg: "LaTeX's " + funcName + " supports only mu units, " + ("not " + size.value.unit + " units"),
+                      report: true
+                    });
                   }
                   if (parser2.mode !== "math") {
-                    parser2.settings.reportNonstrict("mathVsTextUnits", "LaTeX's " + funcName + " works only in math mode");
+                    handleStrict({
+                      strict: parser2.settings.strict,
+                      errorCode: "mathVsTextUnits",
+                      errorMsg: "LaTeX's " + funcName + " works only in math mode",
+                      report: true
+                    });
                   }
                 } else {
                   if (muUnit) {
-                    parser2.settings.reportNonstrict("mathVsTextUnits", "LaTeX's " + funcName + " doesn't support mu units");
+                    handleStrict({
+                      strict: parser2.settings.strict,
+                      errorCode: "mathVsTextUnits",
+                      errorMsg: "LaTeX's " + funcName + " doesn't support mu units",
+                      report: true
+                    });
                   }
                 }
               }
@@ -10767,15 +10531,10 @@ var require_katex = __commonJS({
           defineFunction({
             type: "lap",
             names: ["\\mathllap", "\\mathrlap", "\\mathclap"],
-            props: {
-              numArgs: 1,
-              allowedInText: true
-            },
+            numArgs: 1,
+            allowedInText: true,
             handler: (_ref, args) => {
-              let {
-                parser: parser2,
-                funcName
-              } = _ref;
+              let parser2 = _ref.parser, funcName = _ref.funcName;
               const body = args[0];
               return {
                 type: "lap",
@@ -10788,20 +10547,20 @@ var require_katex = __commonJS({
               let inner2;
               if (group.alignment === "clap") {
                 inner2 = makeSpan([], [buildGroup(group.body, options)]);
-                inner2 = makeSpan(["inner"], [inner2], options);
+                inner2 = makeSpan(["katex-inner"], [inner2], options);
               } else {
-                inner2 = makeSpan(["inner"], [buildGroup(group.body, options)]);
+                inner2 = makeSpan(["katex-inner"], [buildGroup(group.body, options)]);
               }
-              const fix = makeSpan(["fix"], []);
+              const fix = makeSpan(["katex-fix"], []);
               let node = makeSpan([group.alignment], [inner2, fix], options);
-              const strut = makeSpan(["strut"]);
+              const strut = makeSpan(["katex-strut"]);
               strut.style.height = makeEm(node.height + node.depth);
               if (node.depth) {
                 strut.style.verticalAlign = makeEm(-node.depth);
               }
               node.children.unshift(strut);
-              node = makeSpan(["thinbox"], [node], options);
-              return makeSpan(["mord", "vbox"], [node], options);
+              node = makeSpan(["katex-thinbox"], [node], options);
+              return makeSpan(["mord", "katex-vbox"], [node], options);
             },
             mathmlBuilder: (group, options) => {
               const node = new MathNode("mpadded", [buildMathML_buildGroup(group.body, options)]);
@@ -10817,16 +10576,11 @@ var require_katex = __commonJS({
           defineFunction({
             type: "styling",
             names: ["\\(", "$"],
-            props: {
-              numArgs: 0,
-              allowedInText: true,
-              allowedInMath: false
-            },
+            numArgs: 0,
+            allowedInText: true,
+            allowedInMath: false,
             handler(_ref, args) {
-              let {
-                funcName,
-                parser: parser2
-              } = _ref;
+              let funcName = _ref.funcName, parser2 = _ref.parser;
               const outerMode = parser2.mode;
               parser2.switchMode("math");
               const close = funcName === "\\(" ? "\\)" : "$";
@@ -10846,11 +10600,9 @@ var require_katex = __commonJS({
             type: "text",
             // Doesn't matter what this is.
             names: ["\\)", "\\]"],
-            props: {
-              numArgs: 0,
-              allowedInText: true,
-              allowedInMath: false
-            },
+            numArgs: 0,
+            allowedInText: true,
+            allowedInMath: false,
             handler(context, args) {
               throw new src_ParseError("Mismatched " + context.funcName);
             }
@@ -10873,14 +10625,10 @@ var require_katex = __commonJS({
           defineFunction({
             type: "mathchoice",
             names: ["\\mathchoice"],
-            props: {
-              numArgs: 4,
-              primitive: true
-            },
+            numArgs: 4,
+            primitive: true,
             handler: (_ref, args) => {
-              let {
-                parser: parser2
-              } = _ref;
+              let parser2 = _ref.parser;
               return {
                 type: "mathchoice",
                 mode: parser2.mode,
@@ -11120,14 +10868,9 @@ var require_katex = __commonJS({
           defineFunction({
             type: "op",
             names: ["\\coprod", "\\bigvee", "\\bigwedge", "\\biguplus", "\\bigcap", "\\bigcup", "\\intop", "\\prod", "\\sum", "\\bigotimes", "\\bigoplus", "\\bigodot", "\\bigsqcup", "\\smallint", "\u220F", "\u2210", "\u2211", "\u22C0", "\u22C1", "\u22C2", "\u22C3", "\u2A00", "\u2A01", "\u2A02", "\u2A04", "\u2A06"],
-            props: {
-              numArgs: 0
-            },
+            numArgs: 0,
             handler: (_ref, args) => {
-              let {
-                parser: parser2,
-                funcName
-              } = _ref;
+              let parser2 = _ref.parser, funcName = _ref.funcName;
               let fName = funcName;
               if (fName.length === 1) {
                 fName = singleCharBigOps[fName];
@@ -11147,14 +10890,10 @@ var require_katex = __commonJS({
           defineFunction({
             type: "op",
             names: ["\\mathop"],
-            props: {
-              numArgs: 1,
-              primitive: true
-            },
+            numArgs: 1,
+            primitive: true,
             handler: (_ref2, args) => {
-              let {
-                parser: parser2
-              } = _ref2;
+              let parser2 = _ref2.parser;
               const body = args[0];
               return {
                 type: "op",
@@ -11164,9 +10903,7 @@ var require_katex = __commonJS({
                 symbol: false,
                 body: ordargument(body)
               };
-            },
-            htmlBuilder: op_htmlBuilder,
-            mathmlBuilder: op_mathmlBuilder
+            }
           });
           const singleCharIntegrals = {
             "\u222B": "\\int",
@@ -11179,14 +10916,9 @@ var require_katex = __commonJS({
           defineFunction({
             type: "op",
             names: ["\\arcsin", "\\arccos", "\\arctan", "\\arctg", "\\arcctg", "\\arg", "\\ch", "\\cos", "\\cosec", "\\cosh", "\\cot", "\\cotg", "\\coth", "\\csc", "\\ctg", "\\cth", "\\deg", "\\dim", "\\exp", "\\hom", "\\ker", "\\lg", "\\ln", "\\log", "\\sec", "\\sin", "\\sinh", "\\sh", "\\tan", "\\tanh", "\\tg", "\\th"],
-            props: {
-              numArgs: 0
-            },
+            numArgs: 0,
             handler(_ref3) {
-              let {
-                parser: parser2,
-                funcName
-              } = _ref3;
+              let parser2 = _ref3.parser, funcName = _ref3.funcName;
               return {
                 type: "op",
                 mode: parser2.mode,
@@ -11195,21 +10927,14 @@ var require_katex = __commonJS({
                 symbol: false,
                 name: funcName
               };
-            },
-            htmlBuilder: op_htmlBuilder,
-            mathmlBuilder: op_mathmlBuilder
+            }
           });
           defineFunction({
             type: "op",
             names: ["\\det", "\\gcd", "\\inf", "\\lim", "\\max", "\\min", "\\Pr", "\\sup"],
-            props: {
-              numArgs: 0
-            },
+            numArgs: 0,
             handler(_ref4) {
-              let {
-                parser: parser2,
-                funcName
-              } = _ref4;
+              let parser2 = _ref4.parser, funcName = _ref4.funcName;
               return {
                 type: "op",
                 mode: parser2.mode,
@@ -11218,22 +10943,15 @@ var require_katex = __commonJS({
                 symbol: false,
                 name: funcName
               };
-            },
-            htmlBuilder: op_htmlBuilder,
-            mathmlBuilder: op_mathmlBuilder
+            }
           });
           defineFunction({
             type: "op",
             names: ["\\int", "\\iint", "\\iiint", "\\oint", "\\oiint", "\\oiiint", "\u222B", "\u222C", "\u222D", "\u222E", "\u222F", "\u2230"],
-            props: {
-              numArgs: 0,
-              allowedInArgument: true
-            },
+            numArgs: 0,
+            allowedInArgument: true,
             handler(_ref5) {
-              let {
-                parser: parser2,
-                funcName
-              } = _ref5;
+              let parser2 = _ref5.parser, funcName = _ref5.funcName;
               let fName = funcName;
               if (fName.length === 1) {
                 fName = singleCharIntegrals[fName];
@@ -11246,9 +10964,7 @@ var require_katex = __commonJS({
                 symbol: true,
                 name: fName
               };
-            },
-            htmlBuilder: op_htmlBuilder,
-            mathmlBuilder: op_mathmlBuilder
+            }
           });
           ;
           const operatorname_htmlBuilder = (grp, options) => {
@@ -11341,14 +11057,9 @@ var require_katex = __commonJS({
           defineFunction({
             type: "operatorname",
             names: ["\\operatorname@", "\\operatornamewithlimits"],
-            props: {
-              numArgs: 1
-            },
+            numArgs: 1,
             handler: (_ref, args) => {
-              let {
-                parser: parser2,
-                funcName
-              } = _ref;
+              let parser2 = _ref.parser, funcName = _ref.funcName;
               const body = args[0];
               return {
                 type: "operatorname",
@@ -11380,13 +11091,9 @@ var require_katex = __commonJS({
           defineFunction({
             type: "overline",
             names: ["\\overline"],
-            props: {
-              numArgs: 1
-            },
+            numArgs: 1,
             handler(_ref, args) {
-              let {
-                parser: parser2
-              } = _ref;
+              let parser2 = _ref.parser;
               const body = args[0];
               return {
                 type: "overline",
@@ -11414,7 +11121,7 @@ var require_katex = __commonJS({
                   size: defaultRuleThickness
                 }]
               }, options);
-              return makeSpan(["mord", "overline"], [vlist], options);
+              return makeSpan(["mord", "katex-overline"], [vlist], options);
             },
             mathmlBuilder(group, options) {
               const operator = new MathNode("mo", [new TextNode("\u203E")]);
@@ -11428,14 +11135,10 @@ var require_katex = __commonJS({
           defineFunction({
             type: "phantom",
             names: ["\\phantom"],
-            props: {
-              numArgs: 1,
-              allowedInText: true
-            },
+            numArgs: 1,
+            allowedInText: true,
             handler: (_ref, args) => {
-              let {
-                parser: parser2
-              } = _ref;
+              let parser2 = _ref.parser;
               const body = args[0];
               return {
                 type: "phantom",
@@ -11456,14 +11159,10 @@ var require_katex = __commonJS({
           defineFunction({
             type: "vphantom",
             names: ["\\vphantom"],
-            props: {
-              numArgs: 1,
-              allowedInText: true
-            },
+            numArgs: 1,
+            allowedInText: true,
             handler: (_ref2, args) => {
-              let {
-                parser: parser2
-              } = _ref2;
+              let parser2 = _ref2.parser;
               const body = args[0];
               return {
                 type: "vphantom",
@@ -11472,8 +11171,8 @@ var require_katex = __commonJS({
               };
             },
             htmlBuilder: (group, options) => {
-              const inner2 = makeSpan(["inner"], [buildGroup(group.body, options.withPhantom())]);
-              const fix = makeSpan(["fix"], []);
+              const inner2 = makeSpan(["katex-inner"], [buildGroup(group.body, options.withPhantom())]);
+              const fix = makeSpan(["katex-fix"], []);
               return makeSpan(["mord", "rlap"], [inner2, fix], options);
             },
             mathmlBuilder: (group, options) => {
@@ -11488,15 +11187,11 @@ var require_katex = __commonJS({
           defineFunction({
             type: "raisebox",
             names: ["\\raisebox"],
-            props: {
-              numArgs: 2,
-              argTypes: ["size", "hbox"],
-              allowedInText: true
-            },
+            numArgs: 2,
+            argTypes: ["size", "hbox"],
+            allowedInText: true,
             handler(_ref, args) {
-              let {
-                parser: parser2
-              } = _ref;
+              let parser2 = _ref.parser;
               const amount = assertNodeType(args[0], "size").value;
               const body = args[1];
               return {
@@ -11526,18 +11221,44 @@ var require_katex = __commonJS({
             }
           });
           ;
+          const handler = (_ref, args) => {
+            let parser2 = _ref.parser;
+            return {
+              type: "reflectbox",
+              mode: parser2.mode,
+              body: args[0]
+            };
+          };
+          defineFunction({
+            type: "reflectbox",
+            names: ["\\reflectbox"],
+            numArgs: 1,
+            argTypes: ["hbox"],
+            allowedInText: true,
+            handler,
+            htmlBuilder(group, options) {
+              return makeSpan(["mord", "reflectbox"], [buildGroup(group.body, options)], options);
+            },
+            mathmlBuilder(group, options) {
+              return buildMathML_buildGroup(group.body, options);
+            }
+          });
+          defineFunction({
+            type: "reflectbox",
+            names: ["\\mathreflectbox"],
+            numArgs: 1,
+            argTypes: ["math"],
+            handler
+          });
+          ;
           defineFunction({
             type: "internal",
             names: ["\\relax"],
-            props: {
-              numArgs: 0,
-              allowedInText: true,
-              allowedInArgument: true
-            },
+            numArgs: 0,
+            allowedInText: true,
+            allowedInArgument: true,
             handler(_ref) {
-              let {
-                parser: parser2
-              } = _ref;
+              let parser2 = _ref.parser;
               return {
                 type: "internal",
                 mode: parser2.mode
@@ -11548,17 +11269,13 @@ var require_katex = __commonJS({
           defineFunction({
             type: "rule",
             names: ["\\rule"],
-            props: {
-              numArgs: 2,
-              numOptionalArgs: 1,
-              allowedInText: true,
-              allowedInMath: true,
-              argTypes: ["size", "size", "size"]
-            },
+            numArgs: 2,
+            numOptionalArgs: 1,
+            allowedInText: true,
+            allowedInMath: true,
+            argTypes: ["size", "size", "size"],
             handler(_ref, args, optArgs) {
-              let {
-                parser: parser2
-              } = _ref;
+              let parser2 = _ref.parser;
               const shift = optArgs[0];
               const width = assertNodeType(args[0], "size");
               const height = assertNodeType(args[1], "size");
@@ -11571,7 +11288,7 @@ var require_katex = __commonJS({
               };
             },
             htmlBuilder(group, options) {
-              const rule = makeSpan(["mord", "rule"], [], options);
+              const rule = makeSpan(["mord", "katex-rule"], [], options);
               const width = calculateSize(group.width, options);
               const height = calculateSize(group.height, options);
               const shift = group.shift ? calculateSize(group.shift, options) : 0;
@@ -11609,7 +11326,7 @@ var require_katex = __commonJS({
             const inner2 = buildExpression(value, options, false);
             const multiplier = options.sizeMultiplier / baseOptions.sizeMultiplier;
             for (let i = 0; i < inner2.length; i++) {
-              const pos = inner2[i].classes.indexOf("sizing");
+              const pos = inner2[i].classes.indexOf("katex-sizing");
               if (pos < 0) {
                 Array.prototype.push.apply(inner2[i].classes, options.sizingClasses(baseOptions));
               } else if (inner2[i].classes[pos + 1] === "reset-size" + options.size) {
@@ -11628,16 +11345,10 @@ var require_katex = __commonJS({
           defineFunction({
             type: "sizing",
             names: sizeFuncs,
-            props: {
-              numArgs: 0,
-              allowedInText: true
-            },
+            numArgs: 0,
+            allowedInText: true,
             handler: (_ref, args) => {
-              let {
-                breakOnTokenText,
-                funcName,
-                parser: parser2
-              } = _ref;
+              let breakOnTokenText = _ref.breakOnTokenText, funcName = _ref.funcName, parser2 = _ref.parser;
               const body = parser2.parseExpression(false, breakOnTokenText);
               return {
                 type: "sizing",
@@ -11660,15 +11371,11 @@ var require_katex = __commonJS({
           defineFunction({
             type: "smash",
             names: ["\\smash"],
-            props: {
-              numArgs: 1,
-              numOptionalArgs: 1,
-              allowedInText: true
-            },
+            numArgs: 1,
+            numOptionalArgs: 1,
+            allowedInText: true,
             handler: (_ref, args, optArgs) => {
-              let {
-                parser: parser2
-              } = _ref;
+              let parser2 = _ref.parser;
               let smashHeight = false;
               let smashDepth = false;
               const tbArg = optArgs[0] && assertNodeType(optArgs[0], "ordgroup");
@@ -11712,7 +11419,7 @@ var require_katex = __commonJS({
                 node.depth = 0;
               }
               if (group.smashHeight && group.smashDepth) {
-                return makeSpan(["mord", "smash"], [node], options);
+                return makeSpan(["mord", "katex-smash"], [node], options);
               }
               if (node.children) {
                 for (let i = 0; i < node.children.length; i++) {
@@ -11748,14 +11455,10 @@ var require_katex = __commonJS({
           defineFunction({
             type: "sqrt",
             names: ["\\sqrt"],
-            props: {
-              numArgs: 1,
-              numOptionalArgs: 1
-            },
+            numArgs: 1,
+            numOptionalArgs: 1,
             handler(_ref, args, optArgs) {
-              let {
-                parser: parser2
-              } = _ref;
+              let parser2 = _ref.parser;
               const index = optArgs[0];
               const body = args[0];
               return {
@@ -11779,11 +11482,7 @@ var require_katex = __commonJS({
               }
               let lineClearance = theta + phi / 4;
               const minDelimiterHeight = inner2.height + inner2.depth + lineClearance + theta;
-              const {
-                span: img,
-                ruleWidth,
-                advanceWidth
-              } = makeSqrtImage(minDelimiterHeight, options);
+              const _makeSqrtImage = makeSqrtImage(minDelimiterHeight, options), img = _makeSqrtImage.span, ruleWidth = _makeSqrtImage.ruleWidth, advanceWidth = _makeSqrtImage.advanceWidth;
               const delimDepth = img.height - ruleWidth;
               if (delimDepth > inner2.height + inner2.depth + lineClearance) {
                 lineClearance = (lineClearance + delimDepth - inner2.height - inner2.depth) / 2;
@@ -11821,15 +11520,12 @@ var require_katex = __commonJS({
                     elem: rootm
                   }]
                 }, options);
-                const rootVListWrap = makeSpan(["root"], [rootVList]);
+                const rootVListWrap = makeSpan(["katex-root"], [rootVList]);
                 return makeSpan(["mord", "sqrt"], [rootVListWrap, body], options);
               }
             },
             mathmlBuilder(group, options) {
-              const {
-                body,
-                index
-              } = group;
+              const body = group.body, index = group.index;
               return index ? new MathNode("mroot", [buildMathML_buildGroup(body, options), buildMathML_buildGroup(index, options)]) : new MathNode("msqrt", [buildMathML_buildGroup(body, options)]);
             }
           });
@@ -11846,17 +11542,11 @@ var require_katex = __commonJS({
           defineFunction({
             type: "styling",
             names: ["\\displaystyle", "\\textstyle", "\\scriptstyle", "\\scriptscriptstyle"],
-            props: {
-              numArgs: 0,
-              allowedInText: true,
-              primitive: true
-            },
+            numArgs: 0,
+            allowedInText: true,
+            primitive: true,
             handler(_ref, args) {
-              let {
-                breakOnTokenText,
-                funcName,
-                parser: parser2
-              } = _ref;
+              let breakOnTokenText = _ref.breakOnTokenText, funcName = _ref.funcName, parser2 = _ref.parser;
               const body = parser2.parseExpression(true, breakOnTokenText);
               const style = funcName.slice(1, funcName.length - 5);
               if (!isStyleStr(style)) {
@@ -11926,11 +11616,7 @@ var require_katex = __commonJS({
               if (builderDelegate) {
                 return builderDelegate(group, options);
               }
-              const {
-                base: valueBase,
-                sup: valueSup,
-                sub: valueSub
-              } = group;
+              const valueBase = group.base, valueSup = group.sup, valueSub = group.sub;
               const base = buildGroup(valueBase, options);
               let supm;
               let subm;
@@ -12115,7 +11801,7 @@ var require_katex = __commonJS({
           defineFunctionBuilders({
             type: "mathord",
             htmlBuilder(group, options) {
-              return makeOrd(group, options, "mathord");
+              return makeOrd(group, options);
             },
             mathmlBuilder(group, options) {
               const node = new MathNode("mi", [makeText(group.text, group.mode, options)]);
@@ -12129,7 +11815,7 @@ var require_katex = __commonJS({
           defineFunctionBuilders({
             type: "textord",
             htmlBuilder(group, options) {
-              return makeOrd(group, options, "textord");
+              return makeOrd(group, options);
             },
             mathmlBuilder(group, options) {
               const text2 = makeText(group.text, group.mode, options);
@@ -12151,44 +11837,37 @@ var require_katex = __commonJS({
             }
           });
           ;
-          const cssSpace = {
-            "\\nobreak": "nobreak",
-            "\\allowbreak": "allowbreak"
-          };
-          const regularSpace = {
-            " ": {},
-            "\\ ": {},
-            "~": {
-              className: "nobreak"
-            },
-            "\\space": {},
-            "\\nobreakspace": {
-              className: "nobreak"
-            }
-          };
+          const cssSpace = /* @__PURE__ */ new Map([["\\nobreak", "nobreak"], ["\\allowbreak", "allowbreak"]]);
+          const regularSpace = /* @__PURE__ */ new Map([[" ", {}], ["\\ ", {}], ["~", {
+            className: "nobreak"
+          }], ["\\space", {}], ["\\nobreakspace", {
+            className: "nobreak"
+          }]]);
           defineFunctionBuilders({
             type: "spacing",
             htmlBuilder(group, options) {
-              if (regularSpace.hasOwnProperty(group.text)) {
-                const className = regularSpace[group.text].className || "";
+              const regularSpaceItem = regularSpace.get(group.text);
+              const cssSpaceClass = cssSpace.get(group.text);
+              if (regularSpaceItem) {
+                const className = regularSpaceItem.className || "";
                 if (group.mode === "text") {
-                  const ord = makeOrd(group, options, "textord");
+                  const ord = makeOrd(group, options);
                   ord.classes.push(className);
                   return ord;
                 } else {
                   return makeSpan(["mspace", className], [mathsym(group.text, group.mode, options)], options);
                 }
-              } else if (cssSpace.hasOwnProperty(group.text)) {
-                return makeSpan(["mspace", cssSpace[group.text]], [], options);
+              } else if (cssSpaceClass) {
+                return makeSpan(["mspace", cssSpaceClass], [], options);
               } else {
                 throw new src_ParseError('Unknown type of space "' + group.text + '"');
               }
             },
             mathmlBuilder(group, options) {
               let node;
-              if (regularSpace.hasOwnProperty(group.text)) {
+              if (regularSpace.has(group.text)) {
                 node = new MathNode("mtext", [new TextNode("\xA0")]);
-              } else if (cssSpace.hasOwnProperty(group.text)) {
+              } else if (cssSpace.has(group.text)) {
                 return new MathNode("mspace");
               } else {
                 throw new src_ParseError('Unknown type of space "' + group.text + '"');
@@ -12256,17 +11935,12 @@ var require_katex = __commonJS({
               "\\textup",
               "\\emph"
             ],
-            props: {
-              numArgs: 1,
-              argTypes: ["text"],
-              allowedInArgument: true,
-              allowedInText: true
-            },
+            numArgs: 1,
+            argTypes: ["text"],
+            allowedInArgument: true,
+            allowedInText: true,
             handler(_ref, args) {
-              let {
-                parser: parser2,
-                funcName
-              } = _ref;
+              let parser2 = _ref.parser, funcName = _ref.funcName;
               const body = args[0];
               return {
                 type: "text",
@@ -12289,14 +11963,10 @@ var require_katex = __commonJS({
           defineFunction({
             type: "underline",
             names: ["\\underline"],
-            props: {
-              numArgs: 1,
-              allowedInText: true
-            },
+            numArgs: 1,
+            allowedInText: true,
             handler(_ref, args) {
-              let {
-                parser: parser2
-              } = _ref;
+              let parser2 = _ref.parser;
               return {
                 type: "underline",
                 mode: parser2.mode,
@@ -12324,7 +11994,7 @@ var require_katex = __commonJS({
                   elem: innerGroup
                 }]
               }, options);
-              return makeSpan(["mord", "underline"], [vlist], options);
+              return makeSpan(["mord", "katex-underline"], [vlist], options);
             },
             mathmlBuilder(group, options) {
               const operator = new MathNode("mo", [new TextNode("\u203E")]);
@@ -12338,16 +12008,12 @@ var require_katex = __commonJS({
           defineFunction({
             type: "vcenter",
             names: ["\\vcenter"],
-            props: {
-              numArgs: 1,
-              argTypes: ["original"],
-              // In LaTeX, \vcenter can act only on a box.
-              allowedInText: false
-            },
+            numArgs: 1,
+            argTypes: ["original"],
+            // In LaTeX, \vcenter can act only on a box.
+            allowedInText: false,
             handler(_ref, args) {
-              let {
-                parser: parser2
-              } = _ref;
+              let parser2 = _ref.parser;
               return {
                 type: "vcenter",
                 mode: parser2.mode,
@@ -12376,10 +12042,8 @@ var require_katex = __commonJS({
           defineFunction({
             type: "verb",
             names: ["\\verb"],
-            props: {
-              numArgs: 0,
-              allowedInText: true
-            },
+            numArgs: 0,
+            allowedInText: true,
             handler(context, args, optArgs) {
               throw new src_ParseError("\\verb ended by end of line instead of matching delimiter");
             },
@@ -12461,7 +12125,12 @@ var require_katex = __commonJS({
                 const nlIndex = input.indexOf("\n", this.tokenRegex.lastIndex);
                 if (nlIndex === -1) {
                   this.tokenRegex.lastIndex = input.length;
-                  this.settings.reportNonstrict("commentAtEnd", "% comment has no terminating newline; LaTeX would fail because of commenting the end of math mode (e.g. $)");
+                  handleStrict({
+                    strict: this.settings.strict,
+                    errorCode: "commentAtEnd",
+                    errorMsg: "% comment has no terminating newline; LaTeX would fail because of commenting the end of math mode (e.g. $)",
+                    report: true
+                  });
                 } else {
                   this.tokenRegex.lastIndex = nlIndex + 1;
                 }
@@ -12506,13 +12175,11 @@ var require_katex = __commonJS({
                 throw new src_ParseError("Unbalanced namespace destruction: attempt to pop global namespace; please report this as a bug");
               }
               const undefs = this.undefStack.pop();
-              for (const undef in undefs) {
-                if (undefs.hasOwnProperty(undef)) {
-                  if (undefs[undef] == null) {
-                    delete this.current[undef];
-                  } else {
-                    this.current[undef] = undefs[undef];
-                  }
+              for (const key of Object.keys(undefs)) {
+                if (undefs[key] === void 0) {
+                  delete this.current[key];
+                } else {
+                  this.current[key] = undefs[key];
                 }
               }
             }
@@ -12530,7 +12197,7 @@ var require_katex = __commonJS({
              * `get(name) != null`.
              */
             has(name) {
-              return this.current.hasOwnProperty(name) || this.builtins.hasOwnProperty(name);
+              return Object.prototype.hasOwnProperty.call(this.current, name) || Object.prototype.hasOwnProperty.call(this.builtins, name);
             }
             /**
              * Get the current value of a name, or `undefined` if there is no value.
@@ -12541,10 +12208,12 @@ var require_katex = __commonJS({
              * `if (namespace.has(...))`.
              */
             get(name) {
-              if (this.current.hasOwnProperty(name)) {
+              if (Object.prototype.hasOwnProperty.call(this.current, name)) {
                 return this.current[name];
-              } else {
+              } else if (Object.prototype.hasOwnProperty.call(this.builtins, name)) {
                 return this.builtins[name];
+              } else {
+                return void 0;
               }
             }
             /**
@@ -12567,8 +12236,8 @@ var require_katex = __commonJS({
                 }
               } else {
                 const top = this.undefStack[this.undefStack.length - 1];
-                if (top && !top.hasOwnProperty(name)) {
-                  top[name] = this.current[name];
+                if (top && !Object.prototype.hasOwnProperty.call(top, name)) {
+                  top[name] = Object.prototype.hasOwnProperty.call(this.current, name) ? this.current[name] : void 0;
                 }
               }
               if (value == null) {
@@ -13062,6 +12731,8 @@ var require_katex = __commonJS({
           defineMacro("\u27E7", "\\rrbracket");
           defineMacro("\\lBrace", "\\html@mathml{\\mathopen{\\{\\mkern-3.2mu[}}{\\mathopen{\\char`\u2983}}");
           defineMacro("\\rBrace", "\\html@mathml{\\mathclose{]\\mkern-3.2mu\\}}}{\\mathclose{\\char`\u2984}}");
+          defineMacro("\u21A4", "\\mapsfrom");
+          defineMacro("\\mapsfrom", "\\html@mathml{\\mathrel{\\mathreflectbox{\\mapsto}}}{\\mathrel{\\char`\u21A4}}");
           defineMacro("\u2983", "\\lBrace");
           defineMacro("\u2984", "\\rBrace");
           defineMacro("\\minuso", "\\mathbin{\\html@mathml{{\\mathrlap{\\mathchoice{\\kern{0.145em}}{\\kern{0.145em}}{\\kern{0.1015em}}{\\kern{0.0725em}}\\circ}{-}}}{\\char`\u29B5}}");
@@ -13346,16 +13017,14 @@ var require_katex = __commonJS({
                   return null;
                 }
                 start = this.popToken();
-                ({
-                  tokens,
-                  end
-                } = this.consumeArg(["]"]));
+                var _this$consumeArg = this.consumeArg(["]"]);
+                tokens = _this$consumeArg.tokens;
+                end = _this$consumeArg.end;
               } else {
-                ({
-                  tokens,
-                  start,
-                  end
-                } = this.consumeArg());
+                var _this$consumeArg2 = this.consumeArg();
+                tokens = _this$consumeArg2.tokens;
+                start = _this$consumeArg2.start;
+                end = _this$consumeArg2.end;
               }
               this.pushToken(new Token2("EOF", end.loc));
               this.pushTokens(tokens);
@@ -13624,14 +13293,17 @@ var require_katex = __commonJS({
              * `implicitCommands`.
              */
             isDefined(name) {
-              return this.macros.has(name) || src_functions.hasOwnProperty(name) || src_symbols.math.hasOwnProperty(name) || src_symbols.text.hasOwnProperty(name) || implicitCommands.hasOwnProperty(name);
+              return this.macros.has(name) || Object.prototype.hasOwnProperty.call(src_functions, name) || Object.prototype.hasOwnProperty.call(src_symbols.math, name) || Object.prototype.hasOwnProperty.call(src_symbols.text, name) || Object.prototype.hasOwnProperty.call(implicitCommands, name);
             }
             /**
              * Determine whether a command is expandable.
              */
             isExpandable(name) {
               const macro = this.macros.get(name);
-              return macro != null ? typeof macro === "string" || typeof macro === "function" || !macro.unexpandable : src_functions.hasOwnProperty(name) && !src_functions[name].primitive;
+              if (macro != null) {
+                return typeof macro === "string" || typeof macro === "function" || !macro.unexpandable;
+              }
+              return Object.prototype.hasOwnProperty.call(src_functions, name) && !src_functions[name].primitive;
             }
           }
           ;
@@ -14378,8 +14050,7 @@ var require_katex = __commonJS({
                 const lex = this.fetch();
                 if (lex.text === "\\limits" || lex.text === "\\nolimits") {
                   if (base && base.type === "op") {
-                    const limits = lex.text === "\\limits";
-                    base.limits = limits;
+                    base.limits = lex.text === "\\limits";
                     base.alwaysHandleSupSub = true;
                   } else if (base && base.type === "operatorname") {
                     if (base.alwaysHandleSupSub) {
@@ -14456,12 +14127,26 @@ var require_katex = __commonJS({
                   break;
                 }
               }
-              if (superscript2 || subscript2) {
+              if (superscript2 && subscript2) {
                 return {
                   type: "supsub",
                   mode: this.mode,
                   base,
                   sup: superscript2,
+                  sub: subscript2
+                };
+              } else if (superscript2) {
+                return {
+                  type: "supsub",
+                  mode: this.mode,
+                  base,
+                  sup: superscript2
+                };
+              } else if (subscript2) {
+                return {
+                  type: "supsub",
+                  mode: this.mode,
+                  base,
                   sub: subscript2
                 };
               } else {
@@ -14486,10 +14171,7 @@ var require_katex = __commonJS({
               } else if (this.mode === "math" && funcData.allowedInMath === false) {
                 throw new src_ParseError("Can't use function '" + func + "' in math mode", token);
               }
-              const {
-                args,
-                optArgs
-              } = this.parseArguments(func, funcData);
+              const _this$parseArguments = this.parseArguments(func, funcData), args = _this$parseArguments.args, optArgs = _this$parseArguments.optArgs;
               return this.callFunction(func, args, optArgs, token, breakOnTokenText);
             }
             /**
@@ -14513,7 +14195,9 @@ var require_katex = __commonJS({
              * Parses the arguments of a function or environment
              */
             parseArguments(func, funcData) {
-              const totalArgs = funcData.numArgs + funcData.numOptionalArgs;
+              var _funcData$numOptional;
+              const numOptionalArgs = (_funcData$numOptional = funcData.numOptionalArgs) != null ? _funcData$numOptional : 0;
+              const totalArgs = funcData.numArgs + numOptionalArgs;
               if (totalArgs === 0) {
                 return {
                   args: [],
@@ -14523,8 +14207,9 @@ var require_katex = __commonJS({
               const args = [];
               const optArgs = [];
               for (let i = 0; i < totalArgs; i++) {
-                let argType = funcData.argTypes && funcData.argTypes[i];
-                const isOptional = i < funcData.numOptionalArgs;
+                var _funcData$argTypes;
+                let argType = (_funcData$argTypes = funcData.argTypes) == null ? void 0 : _funcData$argTypes[i];
+                const isOptional = i < numOptionalArgs;
                 if ("primitive" in funcData && funcData.primitive && argType == null || // \sqrt expands into primitive if optional argument doesn't exist
                 funcData.type === "sqrt" && i === 1 && optArgs[0] == null) {
                   argType = "primitive";
@@ -14569,7 +14254,11 @@ var require_katex = __commonJS({
                   } : null;
                 }
                 case "raw": {
-                  const token = this.parseStringGroup("raw", optional);
+                  this.gullet.consumeSpaces();
+                  const percentCatcode = this.gullet.lexer.catcodes["%"];
+                  this.gullet.lexer.setCatcode("%", 12);
+                  const token = this.parseStringGroup(optional);
+                  this.gullet.lexer.setCatcode("%", percentCatcode);
                   return token != null ? {
                     type: "raw",
                     mode: "text",
@@ -14587,7 +14276,6 @@ var require_katex = __commonJS({
                   return group;
                 }
                 case "original":
-                case null:
                 case void 0:
                   return this.parseArgumentGroup(optional);
                 default:
@@ -14606,7 +14294,7 @@ var require_katex = __commonJS({
              * Parses a group, essentially returning the string formed by the
              * brace-enclosed tokens plus some position information.
              */
-            parseStringGroup(modeName, optional) {
+            parseStringGroup(optional) {
               const argToken = this.gullet.scanArgument(optional);
               if (argToken == null) {
                 return null;
@@ -14645,7 +14333,7 @@ var require_katex = __commonJS({
              * Parses a color description.
              */
             parseColorGroup(optional) {
-              const res = this.parseStringGroup("color", optional);
+              const res = this.parseStringGroup(optional);
               if (res == null) {
                 return null;
               }
@@ -14673,7 +14361,7 @@ var require_katex = __commonJS({
               if (!optional && this.gullet.future().text !== "{") {
                 res = this.parseRegexGroup(/^[-+]? *(?:$|\d+|\d+\.\d*|\.\d*) *[a-z]{0,2} *$/, "size");
               } else {
-                res = this.parseStringGroup("size", optional);
+                res = this.parseStringGroup(optional);
               }
               if (!res) {
                 return null;
@@ -14706,11 +14394,13 @@ var require_katex = __commonJS({
              * and setting the catcode of % as an active character (as in \hyperref).
              */
             parseUrlGroup(optional) {
+              const percentCatcode = this.gullet.lexer.catcodes["%"];
+              const tildeCatcode = this.gullet.lexer.catcodes["~"];
               this.gullet.lexer.setCatcode("%", 13);
               this.gullet.lexer.setCatcode("~", 12);
-              const res = this.parseStringGroup("url", optional);
-              this.gullet.lexer.setCatcode("%", 14);
-              this.gullet.lexer.setCatcode("~", 13);
+              const res = this.parseStringGroup(optional);
+              this.gullet.lexer.setCatcode("%", percentCatcode);
+              this.gullet.lexer.setCatcode("~", tildeCatcode);
               if (res == null) {
                 return null;
               }
@@ -14779,7 +14469,7 @@ var require_katex = __commonJS({
                 };
               } else {
                 result = this.parseFunction(breakOnTokenText, name) || this.parseSymbol();
-                if (result == null && text2[0] === "\\" && !implicitCommands.hasOwnProperty(text2)) {
+                if (result == null && text2[0] === "\\" && !Object.prototype.hasOwnProperty.call(implicitCommands, text2)) {
                   if (this.settings.throwOnError) {
                     throw new src_ParseError("Undefined control sequence: " + text2, firstToken);
                   }
@@ -14865,9 +14555,15 @@ var require_katex = __commonJS({
                   star
                 };
               }
-              if (unicodeSymbols.hasOwnProperty(text2[0]) && !src_symbols[this.mode][text2[0]]) {
+              if (Object.prototype.hasOwnProperty.call(unicodeSymbols, text2[0]) && !src_symbols[this.mode][text2[0]]) {
                 if (this.settings.strict && this.mode === "math") {
-                  this.settings.reportNonstrict("unicodeTextInMathMode", 'Accented Unicode text character "' + text2[0] + '" used in math mode', nucleus);
+                  handleStrict({
+                    strict: this.settings.strict,
+                    errorCode: "unicodeTextInMathMode",
+                    errorMsg: 'Accented Unicode text character "' + text2[0] + '" used in math mode',
+                    report: true,
+                    token: nucleus
+                  });
                 }
                 text2 = unicodeSymbols[text2[0]] + text2.slice(1);
               }
@@ -14883,7 +14579,13 @@ var require_katex = __commonJS({
               let symbol;
               if (src_symbols[this.mode][text2]) {
                 if (this.settings.strict && this.mode === "math" && extraLatin.includes(text2)) {
-                  this.settings.reportNonstrict("unicodeTextInMathMode", 'Latin-1/Unicode text character "' + text2[0] + '" used in math mode', nucleus);
+                  handleStrict({
+                    strict: this.settings.strict,
+                    errorCode: "unicodeTextInMathMode",
+                    errorMsg: 'Latin-1/Unicode text character "' + text2[0] + '" used in math mode',
+                    report: true,
+                    token: nucleus
+                  });
                 }
                 const group = src_symbols[this.mode][text2].group;
                 const loc = SourceLocation.range(nucleus);
@@ -14908,9 +14610,21 @@ var require_katex = __commonJS({
               } else if (text2.charCodeAt(0) >= 128) {
                 if (this.settings.strict) {
                   if (!supportedCodepoint(text2.charCodeAt(0))) {
-                    this.settings.reportNonstrict("unknownSymbol", 'Unrecognized Unicode character "' + text2[0] + '"' + (" (" + text2.charCodeAt(0) + ")"), nucleus);
+                    handleStrict({
+                      strict: this.settings.strict,
+                      errorCode: "unknownSymbol",
+                      errorMsg: 'Unrecognized Unicode character "' + text2[0] + '"' + (" (" + text2.charCodeAt(0) + ")"),
+                      report: true,
+                      token: nucleus
+                    });
                   } else if (this.mode === "math") {
-                    this.settings.reportNonstrict("unicodeTextInMathMode", 'Unicode text character "' + text2[0] + '" used in math mode', nucleus);
+                    handleStrict({
+                      strict: this.settings.strict,
+                      errorCode: "unicodeTextInMathMode",
+                      errorMsg: 'Unicode text character "' + text2[0] + '" used in math mode',
+                      report: true,
+                      token: nucleus
+                    });
                   }
                 }
                 symbol = {
@@ -15016,12 +14730,12 @@ var require_katex = __commonJS({
             const settings = new Settings(options);
             try {
               const tree = src_parseTree(expression, settings);
-              return buildHTMLTree(tree, expression, settings);
+              return buildHTMLTree(tree, settings);
             } catch (error) {
               return renderError(error, expression, settings);
             }
           };
-          const version = "0.16.47";
+          const version = "0.19.1";
           const __domTree = {
             Span,
             Anchor,
@@ -78660,6 +78374,13 @@ function splitFrontMatter(text2) {
   const lines = match[0].split("\n").length - 1;
   return { frontMatter: match[1], body: "\n".repeat(lines) + text2.slice(match[0].length) };
 }
+function inlineHtmlImages(html, env) {
+  return html.replace(/(<img\b[^>]*?\ssrc\s*=\s*)(["'])([^"']*)\2/gi, (match, head, quote, src) => {
+    if (src.startsWith("data:")) return match;
+    const inlined = inlineImage(src, env);
+    return inlined ? `${head}${quote}${inlined}${quote}` : match;
+  });
+}
 function renderMarkdown(text2, docPath) {
   const env = { docPath, headings: [] };
   currentEnv = env;
@@ -78676,6 +78397,7 @@ function renderMarkdown(text2, docPath) {
   if (hasToc) {
     body = body.replace(new RegExp(`<p[^>]*>\\s*${TOC_MARKER}\\s*</p>`), renderToc(env.headings));
   }
+  body = inlineHtmlImages(body, env);
   const title = env.headings.find((h) => h.level === 1)?.text ?? (docPath ? path.basename(docPath) : "Untitled");
   return { html: renderFrontMatter(env.frontMatter) + body, title, headings: env.headings };
 }
